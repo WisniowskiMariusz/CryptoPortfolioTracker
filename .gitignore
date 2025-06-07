@@ -195,4 +195,4 @@ cython_debug/
 
 # Database files
 #  If you are using SQLite or other database files, you may want to ignore them.
-crypto_portfolio.db
+crypto_tracker.db
