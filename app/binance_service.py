@@ -1,6 +1,7 @@
 import requests
 import time
 from datetime import datetime, timezone, timedelta
+from requests.exceptions import RequestException, HTTPError, Timeout, ConnectionError
 from typing import List, Dict, Generator
 
 BINANCE_API_URL = "https://api.binance.com/api/v3/"
@@ -23,6 +24,7 @@ def convert_time_to_ms(time: str) -> int:
 
 
 def get_klines(symbol: str, interval: str, start_time: str | None = None, end_time: str | None = None, limit: int = 1000) -> List[Dict]:
+    NUMBER_OF_ATTEMPTS = 5
     params = {
         "symbol": symbol,
         "interval": interval,
@@ -31,12 +33,33 @@ def get_klines(symbol: str, interval: str, start_time: str | None = None, end_ti
     if start_time:
         params["startTime"] = convert_time_to_ms(start_time)
     if end_time:
-        params["endTime"] = convert_time_to_ms(end_time)
-    response: requests.Response = requests.get(f"{BINANCE_API_URL}klines", params=params)
-    response.raise_for_status()
-    data: List[Dict] = response.json()
-    print(f"Type of response.json(): {type(data)}")
-    return data
+        params["endTime"] = convert_time_to_ms(end_time)   
+
+    for attempt in range(NUMBER_OF_ATTEMPTS):
+        try:
+            response = requests.get(url=f"{BINANCE_API_URL}klines", params=params, timeout=10)
+            if response.status_code == 429:
+                print("Rate limit exceeded (429). Waiting before retry...")
+                time.sleep(2 ** attempt)  # exponential backoff
+                continue
+            response.raise_for_status()
+            data = response.json()
+            print(f"Type of response.json(): {type(data)}")
+            return data
+        except (ConnectionError, Timeout) as e:
+            print(f"Network error: {e}. Retrying...")
+            time.sleep(2 ** attempt)
+        except HTTPError as e:
+            print(f"HTTP error: {e}")
+            raise
+        except ValueError as e:
+            print(f"Error parsing response JSON: {e}")
+            raise
+        except RequestException as e:
+            print(f"Unexpected request error: {e}")
+            raise
+    raise RuntimeError(f"Failed to fetch data from Binance after {NUMBER_OF_ATTEMPTS} attempts.")
+
 
 def parse_klines(data: List[Dict], symbol: str, interval: str) -> List[Dict]:
     prices: list = []
