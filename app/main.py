@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine, Base
 from app import models, crud
 from app.binance_service import fetch_prices, fetch_prices_stream
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(
     title="CryptoPortfolioTracker API",
