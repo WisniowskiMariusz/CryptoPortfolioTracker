@@ -1,10 +1,16 @@
 import requests
 import time
+import keyring
 from datetime import datetime, timezone, timedelta
 from requests.exceptions import RequestException, HTTPError, Timeout, ConnectionError
 from typing import List, Dict, Generator
+from binance.client import Client
+from binance.exceptions import BinanceAPIException
+
 
 BINANCE_API_URL = "https://api.binance.com/api/v3/"
+BINANCE_API_KEY = keyring.get_password('binance_CherryWallet_api', 'api_key')
+BINANCE_API_SECRET = keyring.get_password('binance_CherryWallet_api', 'api_secret')
 
 def convert_time_to_ms(time: str) -> int:
     print(f"Provided time string: {time}")
@@ -21,6 +27,15 @@ def convert_time_to_ms(time: str) -> int:
     print(f"Used time: {dt}")        
     timestamp_ms = int(dt.timestamp() * 1000)
     return timestamp_ms
+
+
+def get_account_info():
+    api_key = BINANCE_API_KEY
+    api_secret = BINANCE_API_SECRET
+    if not api_key or not api_secret:
+        raise Exception("Binance API credentials not set")
+    client = Client(api_key, api_secret)
+    return client.get_account()
 
 
 def get_klines(symbol: str, interval: str, start_time: str | None = None, end_time: str | None = None, limit: int = 1000) -> List[Dict]:
@@ -66,7 +81,6 @@ def parse_klines(data: List[Dict], symbol: str, interval: str) -> List[Dict]:
     for entry in data:
         open_time_ms = entry[0]
         open_price_str = entry[1]
-
         prices.append({
             "symbol": symbol,
             "interval": interval,
@@ -92,7 +106,6 @@ def fetch_prices_stream(
     while True:        
         if max_requests and requests_made >= max_requests:
             break
-
         data = get_klines(
             symbol=symbol,
             interval=interval,
@@ -100,22 +113,69 @@ def fetch_prices_stream(
             end_time=end_time,
             limit=batch_size
         )
-
         if not data:
             break
-
         yield parse_klines(data, symbol, interval)
-
         if len(data) < batch_size:
             # osiągnęliśmy najdawniejsze dostępne dane
             break
-
         last_open_time_ms = data[0][0]
         print(f"len(data): {len(data)}")
         print(f"data[0]: {data[0]}")
         print(f"data[-1]: {data[-1]}")
         print(f"Last open time in ms: {last_open_time_ms}")
         end_time = datetime.fromtimestamp(last_open_time_ms / 1000, timezone.utc) - timedelta(minutes=1)
-
         requests_made += 1
         time.sleep(0.5)  # aby nie przekroczyć limitu API
+
+def get_binance_client() -> Client:
+    return Client(BINANCE_API_KEY, BINANCE_API_SECRET)
+
+def fetch_trades(symbol, start_time=None, end_time=None) -> list:
+    client = get_binance_client()
+    try:
+        trades = []        
+        # all_symbols = [s['symbol'] for s in client.get_exchange_info().get("symbols")]
+        # print(f"Available symbols: {len(all_symbols)}")
+        limit = 1000
+        from_id = None
+        while True:
+            params = {"symbol": symbol, "limit": limit}
+            if from_id:
+                params["fromId"] = from_id
+            if start_time:
+                params["startTime"] = start_time
+            if end_time:
+                params["endTime"] = end_time
+            batch = client.get_my_trades(**params)
+            if not batch:
+                break
+            for trade in batch:                
+                # Normalize trade data to match your Transaction model fields
+                trades.append(
+                    {
+                    "id": trade.get("id"),
+                    "symbol": trade.get("symbol"),
+                    "orderId": trade.get("orderId"),
+                    "price": float(trade.get("price")),
+                    "qty": float(trade.get("qty"),),
+                    "quoteQty": float(trade.get("quoteQty")),
+                    "commission": float(trade.get("commission")),
+                    "commissionAsset": trade.get("commissionAsset"),
+                    "time": datetime.fromtimestamp(trade['time'] / 1000.0, tz=timezone.utc).replace(tzinfo=None),
+                    "isBuyer": int(trade.get("isBuyer", False)),
+                    "isMaker": int(trade.get("isMaker", False)),
+                    "isBestMatch": int(trade.get("isBestMatch", False))
+                }
+                )
+            if len(batch) < limit:
+                break
+            from_id = batch[-1]["id"] + 1        
+        print(f"Fetched {len(trades)} trades for symbol {symbol}.")
+        if not trades:
+            print(f"No trades found for symbol {symbol}.")
+            return []
+        return trades
+    except BinanceAPIException as e:
+        print(f"Binance API error: {e.message}")
+        raise e
