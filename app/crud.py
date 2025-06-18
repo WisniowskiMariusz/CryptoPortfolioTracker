@@ -2,14 +2,14 @@ from sqlalchemy.orm import Session
 from app import models
 from datetime import datetime
 
-def candle_exists(db: Session, symbol: str, interval: str, time: datetime) -> bool:
-    return db.query(models.PriceHistory).filter(
+def candle_exists(db_session: Session, symbol: str, interval: str, time: datetime) -> bool:
+    return db_session.query(models.PriceHistory).filter(
         models.PriceHistory.symbol == symbol,
         models.PriceHistory.interval == interval,
         models.PriceHistory.time == time
     ).first() is not None
 
-def create_candle(db: Session, candle: dict):
+def create_candle(db_session: Session, candle: dict):
     db_candle = models.PriceHistory(
         symbol=candle["symbol"],
         interval=candle["interval"],
@@ -17,8 +17,8 @@ def create_candle(db: Session, candle: dict):
         price=candle["price"],
         source=candle.get("source", "binance")
     )
-    db.add(db_candle)
-    db.commit()
-    db.refresh(db_candle)
+    db_session.add(db_candle)
+    db_session.commit()
+    db_session.refresh(db_candle)
     return db_candle
 

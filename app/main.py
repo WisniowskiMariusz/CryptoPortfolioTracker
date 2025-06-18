@@ -1,10 +1,11 @@
 import asyncio
 import time
+from typing import Annotated
 from fastapi import FastAPI, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from app.database import SessionLocal, engine, Base, Database
+from app.database import Base, Database, get_db, database
 from app import models, crud
 from app.binance_service import fetch_prices, fetch_prices_stream, fetch_trades, get_account_info
 from dotenv import load_dotenv
@@ -20,14 +21,6 @@ app = FastAPI(
     version="0.1.0"
 )
 
-Base.metadata.create_all(bind=engine)
-
-def get_db_session():
-    db_session = SessionLocal()
-    try:
-        yield db_session
-    finally:
-        db_session.close()
 
 @app.get("/health")
 def health_check():
@@ -42,14 +35,13 @@ def get_account():
 
 @app.post("/fetch_and_store_prices")
 def fetch_prices_endpoint(
+    db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query(default="1d", description="Price interval: (1,3,5,15,30)m, (1,2,4,6,8,12)h, (1,3)d, 1w, 1M"),
     start_time: str | None = Query(default=None, description="YYYY-MM-DD HH:MM format or UNIX timestamp in ms"),
     end_time: str | None = Query(default="2025-05-01 00:00", description="YYYY-MM-DD HH:MM format or UNIX timestamp in ms"),
-    limit: int = Query(1000, ge=1, le=1000, description="Number of prices to fetch (max 1000)"),    
-    db: Session = Depends(get_db_session),
-    database: Database = Depends(Database.get_db_session)
-):
+    limit: int = Query(1000, ge=1, le=1000, description="Number of prices to fetch (max 1000)"),        
+):    
     prices = fetch_prices(symbol, interval, start_time, end_time, limit)
     if not prices:
         raise HTTPException(status_code=404, detail="No prices found")
@@ -63,27 +55,27 @@ def fetch_prices_endpoint(
         print("prices[999] not exist")
 
     for price in prices:
-        if not crud.candle_exists(db, price["symbol"], price["interval"], price["time"]):
-            crud.create_candle(db, price)
+        if not crud.candle_exists(db_session, price["symbol"], price["interval"], price["time"]):
+            crud.create_candle(db_session, price)
             saved_count += 1
 
     return {"message": f"Fetched {len(prices)} prices, saved {saved_count}"}
 
 @app.post("/fetch_and_store_prices_stream")
 def fetch_prices_stream_endpoint(
+    db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query("BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query("1d", description="Price interval, e.g. 1m, 1h, 1d"),    
     end_time: str | None = Query(default=None, description="ISO8601 timestamp or UNIX timestamp in ms"),    
-    max_requests: int = Query(0, ge=0, description="Number of requests (batchów) do wykonania; 0 = do końca dostępnych danych"),
-    db: Session = Depends(get_db_session)
-):
+    max_requests: int = Query(0, ge=0, description="Number of requests (batchów) do wykonania; 0 = do końca dostępnych danych"),    
+):    
     start = time.perf_counter()
     total_saved = 0
     total_fetched = 0
     for prices_batch in fetch_prices_stream(symbol, interval, batch_size=1000, end_time=end_time, max_requests=max_requests):
         for price in prices_batch:
-            if not crud.candle_exists(db, price["symbol"], price["interval"], price["time"]):
-                crud.create_candle(db, price)
+            if not crud.candle_exists(db_session, price["symbol"], price["interval"], price["time"]):
+                crud.create_candle(db_session, price)
                 total_saved += 1
         total_fetched += len(prices_batch)
     elapsed = time.perf_counter() - start        
@@ -145,12 +137,11 @@ def to_timestamp(date_str: str | None) -> int | None:
 
 @app.post("/fetch_and_store_trades")
 async def get_binance_trades(
+    db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     start_time: str = Query(None, description="Start date in YYYY-MM-DD format"),
-    end_time: str = Query(None, description="End date in YYYY-MM-DD format"),
-    db: Session = Depends(get_db_session)
-):
-    
+    end_time: str = Query(None, description="End date in YYYY-MM-DD format"),    
+):    
     start_ts = to_timestamp(start_time)
     end_ts = to_timestamp(end_time)
     try:
@@ -162,14 +153,14 @@ async def get_binance_trades(
     if not trades:
         raise HTTPException(status_code=404, detail="No trades found for the specified symbol.")    
     # Store trades in the database       
-    stored_trades = store_trades(db=db, trades=trades)
+    stored_trades = store_trades(db=db_session, trades=trades)
     print(f"Stored {len(stored_trades)} trades for symbol {symbol}.")
     # Optionally, return the stored trades or the fetched trades
     return {"Stored trades": len(stored_trades), "Fetched trades": len(trades), "symbol": symbol}
 
 
 @app.post("/upload-xlsx")
-async def upload_xlsx(file: UploadFile = File(...), db: Session = Depends(get_db_session)):
+async def upload_xlsx(db_session: Annotated[Session, Depends(database.get_db_session)], file: UploadFile = File(...)):    
     if not file.filename.endswith('.xlsx'):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported.")
     try:
@@ -200,16 +191,16 @@ async def upload_xlsx(file: UploadFile = File(...), db: Session = Depends(get_db
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error parsing row: {e}")
     try:
-        db.bulk_save_objects(records)
-        db.commit()
+        db_session.bulk_save_objects(records)
+        db_session.commit()
     except SQLAlchemyError as e:
-        db.rollback()
+        db_session.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
     return {"inserted": len(records)}
 
 
 @app.post("/upload-csv")
-async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db_session)):
+async def upload_csv(db_session: Annotated[Session, Depends(database.get_db_session)], file: UploadFile = File(...)):    
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only .csv files are supported.")
     try:
@@ -237,20 +228,21 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db_
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error parsing row: {e}")
     try:
-        db.bulk_save_objects(records)
-        db.commit()
+        db_session.bulk_save_objects(records)
+        db_session.commit()
     except SQLAlchemyError as e:
-        db.rollback()
+        db_session.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
     return {"inserted": len(records)}
 
 
 @app.post("/fetch_and_store_trades_for_all_symbols")
 async def fetch_and_store_trades_for_all_symbols(
+    db_session: Annotated[Session, Depends(database.get_db_session)],
     start_time: str = Query(None, description="Start date in YYYY-MM-DD format"),
-    end_time: str = Query(None, description="End date in YYYY-MM-DD format"),
-    db: Session = Depends(get_db_session)):
-    try:
+    end_time: str = Query(None, description="End date in YYYY-MM-DD format"),    
+    ):
+    try:        
         # Pobierz unikalne pary z bazy
         start_dt = to_datetime(start_time)
         end_dt = to_datetime(end_time)
@@ -262,10 +254,10 @@ async def fetch_and_store_trades_for_all_symbols(
         if end_dt:            
             filters_for_xlsx.append(models.TradesFromXlsx.date_utc <= end_dt)        
             filters_for_csv.append(models.TradesFromCsv.date_utc <= end_dt)        
-        pairs_from_xlsx = db.query(models.TradesFromXlsx.pair).filter(*filters_for_xlsx).distinct().all()
+        pairs_from_xlsx = db_session.query(models.TradesFromXlsx.pair).filter(*filters_for_xlsx).distinct().all()
         symbols_from_xlsx: set = set([row[0].replace("/","") for row in pairs_from_xlsx])
         print(f"Unique pairs found in XLSX: {symbols_from_xlsx}")
-        pairs_from_csv = db.query(models.TradesFromCsv.pair).filter(*filters_for_csv).distinct().all()
+        pairs_from_csv = db_session.query(models.TradesFromCsv.pair).filter(*filters_for_csv).distinct().all()
         symbols_from_csv: set = set([row[0] for row in pairs_from_csv])
         print(f"Unique pairs found in CSV: {symbols_from_csv}")
         symbols = list(symbols_from_xlsx | symbols_from_csv)
@@ -277,7 +269,7 @@ async def fetch_and_store_trades_for_all_symbols(
         data = fetch_trades(symbol=symbol, start_time=to_timestamp(start_time), end_time=to_timestamp(end_time))
         results.extend(data)
         await asyncio.sleep(0.5)
-    stored_trades = store_trades(db=db, trades=results)
+    stored_trades = store_trades(db=db_session, trades=results)
     if not results:
         raise HTTPException(status_code=404, detail="No trades found for any symbol.")
     return {"Stored trades": len(stored_trades), "Fetched trades": len(results)}
