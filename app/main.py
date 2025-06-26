@@ -13,6 +13,8 @@ import pandas as pd
 from io import BytesIO, StringIO
 from datetime import datetime
 
+from app.tools import chunked, to_datetime, to_timestamp
+
 load_dotenv()
 
 app = FastAPI(
@@ -83,56 +85,56 @@ def fetch_prices_stream_endpoint(
 
 
 
-def chunked(iterable, n):
-    """Yield successive n-sized chunks from iterable."""
-    iterable = list(iterable)
-    for i in range(0, len(iterable), n):
-        yield iterable[i:i + n]
+# def chunked(iterable, n):
+#     """Yield successive n-sized chunks from iterable."""
+#     iterable = list(iterable)
+#     for i in range(0, len(iterable), n):
+#         yield iterable[i:i + n]
 
 
-def store_trades(db: Session, trades: list) -> int:
-    try:
-        fields = trades[0].keys() if trades else []
-        print(f"Fields in trades: {fields}")
-        # Get all order_ids (or composite keys) from incoming trades
-        incoming_trades = set((trade.get("id"), trade.get("symbol")) for trade in trades)
-        print(f"Incoming keys: {list(incoming_trades)[:5]}... (total {len(incoming_trades)})")
-        existing_trades = set()
-        batch_size = 50  # lub 100, zależnie od wydajności
-        for batch in chunked(incoming_trades, batch_size):
-            conditions = [and_(models.TradesFromApi.id == id_, models.TradesFromApi.symbol == symbol) for id_, symbol in batch]
-            rows = db.query(models.TradesFromApi.id, models.TradesFromApi.symbol).filter(or_(*conditions)).all()
-            existing_trades.update(rows)
-        print(f"Existing keys: {list(existing_trades)[:5]}... (total {len(existing_trades)})")
+# def store_trades(db: Session, trades: list) -> int:
+#     try:
+#         fields = trades[0].keys() if trades else []
+#         print(f"Fields in trades: {fields}")
+#         # Get all order_ids (or composite keys) from incoming trades
+#         incoming_trades = set((trade.get("id"), trade.get("symbol")) for trade in trades)
+#         print(f"Incoming keys: {list(incoming_trades)[:5]}... (total {len(incoming_trades)})")
+#         existing_trades = set()
+#         batch_size = 50  # lub 100, zależnie od wydajności
+#         for batch in chunked(incoming_trades, batch_size):
+#             conditions = [and_(models.TradesFromApi.id == id_, models.TradesFromApi.symbol == symbol) for id_, symbol in batch]
+#             rows = db.query(models.TradesFromApi.id, models.TradesFromApi.symbol).filter(or_(*conditions)).all()
+#             existing_trades.update(rows)
+#         print(f"Existing keys: {list(existing_trades)[:5]}... (total {len(existing_trades)})")
 
         
-        # Filter out trades that already exist
-        unique_trades = [models.create_model_instance_from_dict(model_class=models.TradesFromApi, data=trade) for trade in trades if (trade.get("id"), trade.get("symbol")) not in existing_trades]
-        print(f"Unique trades to insert: {unique_trades[:5]}... (total {len(unique_trades)})")
+#         # Filter out trades that already exist
+#         unique_trades = [models.create_model_instance_from_dict(model_class=models.TradesFromApi, data=trade) for trade in trades if (trade.get("id"), trade.get("symbol")) not in existing_trades]
+#         print(f"Unique trades to insert: {unique_trades[:5]}... (total {len(unique_trades)})")
 
-        # Bulk insert only unique trades
-        db.bulk_save_objects(unique_trades)
-        db.commit()
-        return unique_trades
-    except SQLAlchemyError as e:
-        db.rollback()
-        print(f"Database error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
+#         # Bulk insert only unique trades
+#         db.bulk_save_objects(unique_trades)
+#         db.commit()
+#         return unique_trades
+#     except SQLAlchemyError as e:
+#         db.rollback()
+#         print(f"Database error: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
     
 
-def to_datetime(date_str:str | None) -> datetime | None:
-    if not date_str:
-        return None
-    try:
-        return datetime.strptime(date_str, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid date format: {date_str}. Use YYYY-MM-DD.")
+# def to_datetime(date_str:str | None) -> datetime | None:
+#     if not date_str:
+#         return None
+#     try:
+#         return datetime.strptime(date_str, "%Y-%m-%d")
+#     except ValueError:
+#         raise HTTPException(status_code=400, detail=f"Invalid date format: {date_str}. Use YYYY-MM-DD.")
 
 
-def to_timestamp(date_str: str | None) -> int | None:
-    if not date_str:
-        return None
-    return int(to_datetime(date_str=date_str).timestamp() * 1000)
+# def to_timestamp(date_str: str | None) -> int | None:
+#     if not date_str:
+#         return None
+#     return int(to_datetime(date_str=date_str).timestamp() * 1000)
     
 
 @app.post("/fetch_and_store_trades")
@@ -153,7 +155,7 @@ async def get_binance_trades(
     if not trades:
         raise HTTPException(status_code=404, detail="No trades found for the specified symbol.")    
     # Store trades in the database       
-    stored_trades = store_trades(db=db_session, trades=trades)
+    stored_trades = database.store_trades(db=db_session, trades=trades)
     print(f"Stored {len(stored_trades)} trades for symbol {symbol}.")
     # Optionally, return the stored trades or the fetched trades
     return {"Stored trades": len(stored_trades), "Fetched trades": len(trades), "symbol": symbol}
@@ -217,8 +219,8 @@ async def upload_csv(db_session: Annotated[Session, Depends(database.get_db_sess
         try:
             trade = models.TradesFromCsv(
                 date_utc=pd.to_datetime(row["Date(UTC)"]),
-                pair=row["Pair"],
-                side=row["Side"],
+                pair=str(row["Pair"]),
+                side=str(row["Side"]),
                 price=float(row["Price"]),
                 executed=str(row["Executed"]),
                 amount=str(row["Amount"]),
@@ -269,7 +271,7 @@ async def fetch_and_store_trades_for_all_symbols(
         data = fetch_trades(symbol=symbol, start_time=to_timestamp(start_time), end_time=to_timestamp(end_time))
         results.extend(data)
         await asyncio.sleep(0.5)
-    stored_trades = store_trades(db=db_session, trades=results)
+    stored_trades = database.store_trades(db_session=db_session, trades=results)
     if not results:
         raise HTTPException(status_code=404, detail="No trades found for any symbol.")
     return {"Stored trades": len(stored_trades), "Fetched trades": len(results)}
