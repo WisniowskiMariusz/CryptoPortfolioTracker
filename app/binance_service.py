@@ -79,6 +79,8 @@ def get_klines(symbol: str, interval: str, start_time: str | None = None, end_ti
 def parse_klines(data: List[Dict], symbol: str, interval: str) -> List[Dict]:
     prices: list = []
     for entry in data:
+        if not entry or len(entry) < 2:
+            continue  # skip empty or malformed entries        
         open_time_ms = entry[0]
         open_price_str = entry[1]
         prices.append({
@@ -131,13 +133,10 @@ def fetch_prices_stream(
 def get_binance_client() -> Client:
     return Client(BINANCE_API_KEY, BINANCE_API_SECRET)
 
-def fetch_trades(symbol, start_time=None, end_time=None) -> list:
+def fetch_trades(symbol, start_time=None, end_time=None, limit=1000) -> list:
     client = get_binance_client()
     try:
-        trades = []        
-        # all_symbols = [s['symbol'] for s in client.get_exchange_info().get("symbols")]
-        # print(f"Available symbols: {len(all_symbols)}")
-        limit = 1000
+        trades = []
         from_id = None
         while True:
             params = {"symbol": symbol, "limit": limit}
