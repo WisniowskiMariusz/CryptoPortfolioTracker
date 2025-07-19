@@ -2,7 +2,7 @@ import os
 from sqlalchemy import Column, Integer, BigInteger, VARCHAR, String, Float, DateTime, PrimaryKeyConstraint
 from sqlalchemy.dialects.mssql import SMALLDATETIME
 from sqlalchemy.inspection import inspect 
-from app.database import Base
+from app.base import Base
 
 # Use SMALLDATETIME only if SQL Server is being used
 transaction_time_type = SMALLDATETIME if os.getenv("USE_SQL_SERVER", "true").lower() == "true" else DateTime
@@ -70,10 +70,47 @@ class PriceHistory(Base):
     price = Column(Float)                      
     source = Column(String(20), default="binance")
 
+class Deposit(Base):
+    __tablename__ = "deposits"
+
+    id = Column(String(40), primary_key=True, index=True)  # Binance deposit id is a string
+    amount = Column(String(32))
+    coin = Column(String(20))
+    network = Column(String(20))
+    status = Column(Integer)
+    address = Column(String(128))
+    address_tag = Column(String(128))
+    tx_id = Column(String(128))
+    insert_time = Column(transaction_time_type, name="insert_time", index=True)
+    transfer_type = Column(Integer)
+    confirm_times = Column(String(20))
+    unlock_confirm = Column(Integer)
+    wallet_type = Column(Integer)
+
+class Withdrawal(Base):
+    __tablename__ = "withdrawals"
+
+    id = Column(String(40), primary_key=True, index=True)
+    amount = Column(String(32))
+    coin = Column(String(20))
+    network = Column(String(20))
+    status = Column(Integer)
+    address = Column(String(128))
+    address_tag = Column(String(128))
+    tx_id = Column(String(128))
+    apply_time = Column(String(32))
+    success_time = Column(String(32))
+    transfer_type = Column(Integer)    
+    wallet_type = Column(Integer)
+    transaction_fee = Column(String(32))
+    info = Column(String(255))
+    confirm_no = Column(String(50))
+    tx_key = Column(String(128))
+
 def create_model_instance_from_dict(model_class, data: dict, key_map: dict | None=None):
     """
-    Tworzy instancję modelu SQLAlchemy na podstawie słownika danych.
-    key_map: opcjonalny słownik mapujący klucze z danych na pola modelu.
+    Creates a SQLAlchemy model instance from a data dictionary.
+    key_map: optional dictionary mapping data keys to model fields.
     """    
     key_map = key_map or {}
     db_column_names = [column.name for column in inspect(model_class).mapper.columns]    
