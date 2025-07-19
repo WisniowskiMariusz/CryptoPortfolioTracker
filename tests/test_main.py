@@ -7,6 +7,10 @@ from app.database import database
 from sqlalchemy.exc import SQLAlchemyError
 
 client = TestClient(app)
+MIME_TYPE_EXCEL_XLSX = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
 
 def test_health_check():
     response = client.get("/health")
@@ -22,7 +26,7 @@ def test_fetch_prices_endpoint_success(mock_crud, mock_fetch_prices):
         "interval": "1d",
         "time": "2024-01-01T00:00:00",
         "price": 42000.0,
-        "source": "binance"
+        "source": "binance",
     }
     mock_fetch_prices.return_value = [mock_price] * 2
     mock_crud.candle_exists.return_value = False
@@ -49,7 +53,7 @@ def test_fetch_prices_stream_endpoint(mock_crud, mock_fetch_prices_stream):
         "interval": "1d",
         "time": "2024-01-01T00:00:00",
         "price": 42000.0,
-        "source": "binance"
+        "source": "binance",
     }
 
     # Simulate one batch of 2 prices
@@ -59,7 +63,10 @@ def test_fetch_prices_stream_endpoint(mock_crud, mock_fetch_prices_stream):
 
     response = client.post("/fetch_and_store_prices_stream")
     assert response.status_code == 200
-    assert "Fetched 2 prices from stream, saved 2 to database" in response.json()["message"]
+    assert (
+        "Fetched 2 prices from stream, saved 2 to database"
+        in response.json()["message"]
+    )
 
 
 @patch("app.main.get_account_info")
@@ -110,48 +117,65 @@ def test_upload_xlsx_missing_column():
     file_bytes = io.BytesIO()
     df.to_excel(file_bytes, index=False, engine="openpyxl")
     file_bytes.seek(0)
+
     def override_get_db_session():
         class DummySession:
-            def bulk_save_objects(self, records): pass
-            def commit(self): pass
+            def bulk_save_objects(self, records):
+                pass
+
+            def commit(self):
+                pass
+
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
     response = client.post(
         "/upload-xlsx",
-        files={"file": ("test.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        files={
+            "file": (
+                "test.xlsx",
+                file_bytes,
+                MIME_TYPE_EXCEL_XLSX,
+            )
+        },
     )
     assert response.status_code == 400
     assert "Missing required columns" in response.json()["detail"]
 
+
 def test_upload_xlsx_wrong_filetype():
     response = client.post(
-        "/upload-xlsx",
-        files={"file": ("test.txt", b"abc", "text/plain")}
+        "/upload-xlsx", files={"file": ("test.txt", b"abc", "text/plain")}
     )
     assert response.status_code == 400
     assert "Only .xlsx files are supported." in response.json()["detail"]
 
 
 def test_upload_xlsx_success():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02"],
-        "Pair": ["RENDEREUR"],
-        "Base Asset": ["RENDER"],
-        "Quote Asset": ["EUR"],
-        "Type": ["buy"],
-        "Price": [2.971],
-        "Amount": [5.942],
-        "Total": [17.64],
-        "Fee": [0.0000079],
-        "Fee Coin": ["BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02"],
+            "Pair": ["RENDEREUR"],
+            "Base Asset": ["RENDER"],
+            "Quote Asset": ["EUR"],
+            "Type": ["buy"],
+            "Price": [2.971],
+            "Amount": [5.942],
+            "Total": [17.64],
+            "Fee": [0.0000079],
+            "Fee Coin": ["BNB"],
+        }
+    )
     file_bytes = io.BytesIO()
     df.to_excel(file_bytes, index=False, engine="openpyxl")
     file_bytes.seek(0)
 
     class DummySession:
-        def bulk_save_objects(self, records): pass
-        def commit(self): pass
+        def bulk_save_objects(self, records):
+            pass
+
+        def commit(self):
+            pass
 
     def override_get_db_session():
         yield DummySession()
@@ -160,120 +184,167 @@ def test_upload_xlsx_success():
 
     response = client.post(
         "/upload-xlsx",
-        files={"file": ("test.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        files={
+            "file": (
+                "test.xlsx",
+                file_bytes,
+                MIME_TYPE_EXCEL_XLSX,
+            )
+        },
     )
     assert response.status_code == 200
     assert "inserted" in response.json()
 
+
 def test_upload_xlsx_row_parse_error():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02"],
-        "Pair": ["RENDEREUR"],
-        "Base Asset": ["RENDER"],
-        "Quote Asset": ["EUR"],
-        "Type": ["buy"],
-        "Price": ["not_a_number"],  # Błąd!
-        "Amount": [5.942],
-        "Total": [17.64],
-        "Fee": [0.0000079],
-        "Fee Coin": ["BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02"],
+            "Pair": ["RENDEREUR"],
+            "Base Asset": ["RENDER"],
+            "Quote Asset": ["EUR"],
+            "Type": ["buy"],
+            "Price": ["not_a_number"],  # Błąd!
+            "Amount": [5.942],
+            "Total": [17.64],
+            "Fee": [0.0000079],
+            "Fee Coin": ["BNB"],
+        }
+    )
     file_bytes = io.BytesIO()
     df.to_excel(file_bytes, index=False, engine="openpyxl")
     file_bytes.seek(0)
 
     class DummySession:
-        def bulk_save_objects(self, records): pass
-        def commit(self): pass
+        def bulk_save_objects(self, records):
+            pass
+
+        def commit(self):
+            pass
 
     def override_get_db_session():
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     response = client.post(
         "/upload-xlsx",
-        files={"file": ("test.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        files={
+            "file": (
+                "test.xlsx",
+                file_bytes,
+                MIME_TYPE_EXCEL_XLSX,
+            )
+        },
     )
     assert response.status_code == 400
     assert "Error parsing row" in response.json()["detail"]
 
+
 def test_upload_xlsx_db_error():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02"],
-        "Pair": ["RENDEREUR"],
-        "Base Asset": ["RENDER"],
-        "Quote Asset": ["EUR"],
-        "Type": ["buy"],
-        "Price": [2.971],
-        "Amount": [5.942],
-        "Total": [17.64],
-        "Fee": [0.0000079],
-        "Fee Coin": ["BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02"],
+            "Pair": ["RENDEREUR"],
+            "Base Asset": ["RENDER"],
+            "Quote Asset": ["EUR"],
+            "Type": ["buy"],
+            "Price": [2.971],
+            "Amount": [5.942],
+            "Total": [17.64],
+            "Fee": [0.0000079],
+            "Fee Coin": ["BNB"],
+        }
+    )
     file_bytes = io.BytesIO()
     df.to_excel(file_bytes, index=False, engine="openpyxl")
     file_bytes.seek(0)
 
     class DummySession:
-        def bulk_save_objects(self, records): raise SQLAlchemyError("fail")
-        def commit(self): pass
-        def rollback(self): pass
+        def bulk_save_objects(self, records):
+            raise SQLAlchemyError("fail")
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
 
     def override_get_db_session():
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     response = client.post(
         "/upload-xlsx",
-        files={"file": ("test.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        files={
+            "file": (
+                "test.xlsx",
+                file_bytes,
+                MIME_TYPE_EXCEL_XLSX,
+            )
+        },
     )
     assert response.status_code == 500
     assert "Database error" in response.json()["detail"]
+
 
 def test_upload_csv_missing_column():
     df = pd.DataFrame({"A": [1]})
     file_bytes = io.StringIO()
     df.to_csv(file_bytes, index=False)
     file_bytes.seek(0)
+
     def override_get_db_session():
         class DummySession:
-            def bulk_save_objects(self, records): pass
-            def commit(self): pass
+            def bulk_save_objects(self, records):
+                pass
+
+            def commit(self):
+                pass
+
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
     response = client.post(
         "/upload-csv",
-        files={"file": ("test.csv", file_bytes.getvalue(), "text/csv")}
+        files={"file": ("test.csv", file_bytes.getvalue(), "text/csv")},
     )
     assert response.status_code == 400
     assert "Missing required columns" in response.json()["detail"]
 
+
 def test_upload_csv_wrong_filetype():
     response = client.post(
-        "/upload-csv",
-        files={"file": ("test.txt", "abc", "text/plain")}
+        "/upload-csv", files={"file": ("test.txt", "abc", "text/plain")}
     )
     assert response.status_code == 400
     assert "Only .csv files are supported." in response.json()["detail"]
 
+
 def test_upload_csv_success():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02"],
-        "Pair": ["RENDEREUR"],
-        "Side": ["BUY"],
-        "Price": ["2.971"],
-        "Executed": ["2RENDER"],
-        "Amount": ["5.942EUR"],
-        "Fee": ["0.0000079BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02"],
+            "Pair": ["RENDEREUR"],
+            "Side": ["BUY"],
+            "Price": ["2.971"],
+            "Executed": ["2RENDER"],
+            "Amount": ["5.942EUR"],
+            "Fee": ["0.0000079BNB"],
+        }
+    )
     file_str = io.StringIO()
     df.to_csv(file_str, index=False)
     file_bytes = io.BytesIO(file_str.getvalue().encode("utf-8"))
     file_bytes.seek(0)
 
     class DummySession:
-        def bulk_save_objects(self, records): pass
-        def commit(self): pass
+        def bulk_save_objects(self, records):
+            pass
+
+        def commit(self):
+            pass
 
     def override_get_db_session():
         yield DummySession()
@@ -281,72 +352,86 @@ def test_upload_csv_success():
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     response = client.post(
-        "/upload-csv",
-        files={"file": ("test.csv", file_bytes, "text/csv")}
+        "/upload-csv", files={"file": ("test.csv", file_bytes, "text/csv")}
     )
     assert response.status_code == 200
     assert "inserted" in response.json()
 
+
 def test_upload_csv_row_parse_error():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02"],
-        "Pair": ["RENDEREUR"],
-        "Side": ["BUY"],
-        "Price": ["not_a_number"],
-        "Executed": ["2RENDER"],
-        "Amount": ["5.942EUR"],
-        "Fee": ["0.0000079BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02"],
+            "Pair": ["RENDEREUR"],
+            "Side": ["BUY"],
+            "Price": ["not_a_number"],
+            "Executed": ["2RENDER"],
+            "Amount": ["5.942EUR"],
+            "Fee": ["0.0000079BNB"],
+        }
+    )
     file_str = io.StringIO()
     df.to_csv(file_str, index=False)
     file_bytes = io.BytesIO(file_str.getvalue().encode("utf-8"))
     file_bytes.seek(0)
 
     class DummySession:
-        def bulk_save_objects(self, records): pass
-        def commit(self): pass
+        def bulk_save_objects(self, records):
+            pass
+
+        def commit(self):
+            pass
 
     def override_get_db_session():
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     response = client.post(
-        "/upload-csv",
-        files={"file": ("test.csv", file_bytes, "text/csv")}
+        "/upload-csv", files={"file": ("test.csv", file_bytes, "text/csv")}
     )
     assert response.status_code == 400
     assert "Error parsing row" in response.json()["detail"]
 
+
 def test_upload_csv_db_error():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02"],
-        "Pair": ["RENDEREUR"],
-        "Side": ["BUY"],
-        "Price": ["2.971"],
-        "Executed": ["2RENDER"],
-        "Amount": ["5.942EUR"],
-        "Fee": ["0.0000079BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02"],
+            "Pair": ["RENDEREUR"],
+            "Side": ["BUY"],
+            "Price": ["2.971"],
+            "Executed": ["2RENDER"],
+            "Amount": ["5.942EUR"],
+            "Fee": ["0.0000079BNB"],
+        }
+    )
     file_str = io.StringIO()
     df.to_csv(file_str, index=False)
     file_bytes = io.BytesIO(file_str.getvalue().encode("utf-8"))
     file_bytes.seek(0)
 
     class DummySession:
-        def bulk_save_objects(self, records): raise SQLAlchemyError("fail")
-        def commit(self): pass
-        def rollback(self): pass
+        def bulk_save_objects(self, records):
+            raise SQLAlchemyError("fail")
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
 
     def override_get_db_session():
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     response = client.post(
-        "/upload-csv",
-        files={"file": ("test.csv", file_bytes, "text/csv")}
+        "/upload-csv", files={"file": ("test.csv", file_bytes, "text/csv")}
     )
     assert response.status_code == 500
     assert "Database error" in response.json()["detail"]
+
 
 @patch("app.main.datetime_from_str")
 def test_fetch_and_store_trades_for_all_symbols_db_error(mock_to_datetime):
@@ -355,44 +440,68 @@ def test_fetch_and_store_trades_for_all_symbols_db_error(mock_to_datetime):
     assert response.status_code == 500
     assert "DB error" in response.json()["detail"]
 
+
 def test_upload_xlsx_read_error():
     def override_get_db_session():
         class DummySession:
-            def bulk_save_objects(self, records): pass
-            def commit(self): pass
+            def bulk_save_objects(self, records):
+                pass
+
+            def commit(self):
+                pass
+
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     # Uszkodzony plik xlsx
     response = client.post(
         "/upload-xlsx",
-        files={"file": ("test.xlsx", b"not an excel file", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        files={
+            "file": (
+                "test.xlsx",
+                b"not an excel file",
+                MIME_TYPE_EXCEL_XLSX,
+            )
+        },
     )
     assert response.status_code == 400
     assert "Error reading Excel file" in response.json()["detail"]
 
+
 def test_upload_csv_read_error():
     def override_get_db_session():
         class DummySession:
-            def bulk_save_objects(self, records): pass
-            def commit(self): pass
+            def bulk_save_objects(self, records):
+                pass
+
+            def commit(self):
+                pass
+
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     # Uszkodzony plik csv
     response = client.post(
         "/upload-csv",
-        files={"file": ("test.csv", b"\x00\x01\x02", "text/csv")}
+        files={"file": ("test.csv", b"\x00\x01\x02", "text/csv")},
     )
     assert response.status_code == 400
     assert "Missing required columns" in response.json()["detail"]
 
+
 def test_upload_xlsx_empty_file():
     def override_get_db_session():
         class DummySession:
-            def bulk_save_objects(self, records): pass
-            def commit(self): pass
+            def bulk_save_objects(self, records):
+                pass
+
+            def commit(self):
+                pass
+
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     # Pusty plik xlsx
@@ -400,167 +509,243 @@ def test_upload_xlsx_empty_file():
     file_bytes.seek(0)
     response = client.post(
         "/upload-xlsx",
-        files={"file": ("test.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        files={
+            "file": (
+                "test.xlsx",
+                file_bytes,
+                MIME_TYPE_EXCEL_XLSX,
+            )
+        },
     )
     # Może być 400 lub 422 w zależności od walidacji
     assert response.status_code in (400, 422)
 
+
 def test_upload_csv_empty_file():
     def override_get_db_session():
         class DummySession:
-            def bulk_save_objects(self, records): pass
-            def commit(self): pass
+            def bulk_save_objects(self, records):
+                pass
+
+            def commit(self):
+                pass
+
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
 
     # Pusty plik csv
     file_bytes = io.BytesIO()
     file_bytes.seek(0)
     response = client.post(
-        "/upload-csv",
-        files={"file": ("test.csv", file_bytes, "text/csv")}
+        "/upload-csv", files={"file": ("test.csv", file_bytes, "text/csv")}
     )
     assert response.status_code in (400, 422)
 
+
 def test_upload_xlsx_missing_one_column():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02"],
-        # "Pair" intentionally missing
-        "Base Asset": ["RENDER"],
-        "Quote Asset": ["EUR"],
-        "Type": ["buy"],
-        "Price": [2.971],
-        "Amount": [5.942],
-        "Total": [17.64],
-        "Fee": [0.0000079],
-        "Fee Coin": ["BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02"],
+            # "Pair" intentionally missing
+            "Base Asset": ["RENDER"],
+            "Quote Asset": ["EUR"],
+            "Type": ["buy"],
+            "Price": [2.971],
+            "Amount": [5.942],
+            "Total": [17.64],
+            "Fee": [0.0000079],
+            "Fee Coin": ["BNB"],
+        }
+    )
     file_bytes = io.BytesIO()
     df.to_excel(file_bytes, index=False, engine="openpyxl")
     file_bytes.seek(0)
+
     def override_get_db_session():
         class DummySession:
-            def bulk_save_objects(self, records): pass
-            def commit(self): pass
+            def bulk_save_objects(self, records):
+                pass
+
+            def commit(self):
+                pass
+
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
     response = client.post(
         "/upload-xlsx",
-        files={"file": ("test.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        files={
+            "file": (
+                "test.xlsx",
+                file_bytes,
+                MIME_TYPE_EXCEL_XLSX,
+            )
+        },
     )
     assert response.status_code == 400
     assert "Missing required columns" in response.json()["detail"]
+
 
 def test_upload_csv_missing_one_column():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02"],
-        # "Pair" intentionally missing
-        "Side": ["BUY"],
-        "Price": ["2.971"],
-        "Executed": ["2RENDER"],
-        "Amount": ["5.942EUR"],
-        "Fee": ["0.0000079BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02"],
+            # "Pair" intentionally missing
+            "Side": ["BUY"],
+            "Price": ["2.971"],
+            "Executed": ["2RENDER"],
+            "Amount": ["5.942EUR"],
+            "Fee": ["0.0000079BNB"],
+        }
+    )
     file_str = io.StringIO()
     df.to_csv(file_str, index=False)
     file_bytes = io.BytesIO(file_str.getvalue().encode("utf-8"))
     file_bytes.seek(0)
+
     def override_get_db_session():
         class DummySession:
-            def bulk_save_objects(self, records): pass
-            def commit(self): pass
+            def bulk_save_objects(self, records):
+                pass
+
+            def commit(self):
+                pass
+
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
     response = client.post(
-        "/upload-csv",
-        files={"file": ("test.csv", file_bytes, "text/csv")}
+        "/upload-csv", files={"file": ("test.csv", file_bytes, "text/csv")}
     )
     assert response.status_code == 400
     assert "Missing required columns" in response.json()["detail"]
 
+
 def test_upload_csv_with_duplicate_rows():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02", "2025-06-14 09:26:02"],
-        "Pair": ["RENDEREUR", "RENDEREUR"],
-        "Side": ["BUY", "BUY"],
-        "Price": ["2.971", "2.971"],
-        "Executed": ["2RENDER", "2RENDER"],
-        "Amount": ["5.942EUR", "5.942EUR"],
-        "Fee": ["0.0000079BNB", "0.0000079BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02", "2025-06-14 09:26:02"],
+            "Pair": ["RENDEREUR", "RENDEREUR"],
+            "Side": ["BUY", "BUY"],
+            "Price": ["2.971", "2.971"],
+            "Executed": ["2RENDER", "2RENDER"],
+            "Amount": ["5.942EUR", "5.942EUR"],
+            "Fee": ["0.0000079BNB", "0.0000079BNB"],
+        }
+    )
     file_str = io.StringIO()
     df.to_csv(file_str, index=False)
     file_bytes = io.BytesIO(file_str.getvalue().encode("utf-8"))
     file_bytes.seek(0)
+
     class DummySession:
-        def bulk_save_objects(self, records): pass
-        def commit(self): pass
+        def bulk_save_objects(self, records):
+            pass
+
+        def commit(self):
+            pass
+
     def override_get_db_session():
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
     response = client.post(
-        "/upload-csv",
-        files={"file": ("test.csv", file_bytes, "text/csv")}
+        "/upload-csv", files={"file": ("test.csv", file_bytes, "text/csv")}
     )
     assert response.status_code == 200
     assert "inserted" in response.json()
     assert response.json()["inserted"] == 2
 
+
 def test_upload_xlsx_with_duplicate_rows():
-    df = pd.DataFrame({
-        "Date(UTC)": ["2025-06-14 09:26:02", "2025-06-14 09:26:02"],
-        "Pair": ["RENDEREUR", "RENDEREUR"],
-        "Base Asset": ["RENDER", "RENDER"],
-        "Quote Asset": ["EUR", "EUR"],
-        "Type": ["buy", "buy"],
-        "Price": [2.971, 2.971],
-        "Amount": [5.942, 5.942],
-        "Total": [17.64, 17.64],
-        "Fee": [0.0000079, 0.0000079],
-        "Fee Coin": ["BNB", "BNB"],
-    })
+    df = pd.DataFrame(
+        {
+            "Date(UTC)": ["2025-06-14 09:26:02", "2025-06-14 09:26:02"],
+            "Pair": ["RENDEREUR", "RENDEREUR"],
+            "Base Asset": ["RENDER", "RENDER"],
+            "Quote Asset": ["EUR", "EUR"],
+            "Type": ["buy", "buy"],
+            "Price": [2.971, 2.971],
+            "Amount": [5.942, 5.942],
+            "Total": [17.64, 17.64],
+            "Fee": [0.0000079, 0.0000079],
+            "Fee Coin": ["BNB", "BNB"],
+        }
+    )
     file_bytes = io.BytesIO()
     df.to_excel(file_bytes, index=False, engine="openpyxl")
     file_bytes.seek(0)
+
     class DummySession:
-        def bulk_save_objects(self, records): pass
-        def commit(self): pass
+        def bulk_save_objects(self, records):
+            pass
+
+        def commit(self):
+            pass
+
     def override_get_db_session():
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
     response = client.post(
         "/upload-xlsx",
-        files={"file": ("test.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        files={
+            "file": (
+                "test.xlsx",
+                file_bytes,
+                MIME_TYPE_EXCEL_XLSX,
+            )
+        },
     )
     assert response.status_code == 200
     assert "inserted" in response.json()
     assert response.json()["inserted"] == 2
+
 
 def test_fetch_and_store_trades_for_all_symbols_no_pairs():
     class DummyQuery:
-        def filter(self, *a, **kw): return self
-        def distinct(self): return self
-        def all(self): return []
+        def filter(self, *a, **kw):
+            return self
+
+        def distinct(self):
+            return self
+
+        def all(self):
+            return []
+
     class DummySession:
-        def bulk_save_objects(self, records): pass
-        def commit(self): pass
-        def query(self, *a, **kw): return DummyQuery()
+        def bulk_save_objects(self, records):
+            pass
+
+        def commit(self):
+            pass
+
+        def query(self, *a, **kw):
+            return DummyQuery()
+
     def override_get_db_session():
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
     response = client.post("/fetch_and_store_trades_for_all_symbols")
     # Zależnie od implementacji może być 404 lub 200 z info o braku
     assert response.status_code in (404, 200)
 
+
 def test_fetch_and_store_trades_for_all_symbols_db_exception():
     class DummySession:
-        def query(self, *a, **kw): raise Exception("fail")
+        def query(self, *a, **kw):
+            raise Exception("fail")
+
     def override_get_db_session():
         yield DummySession()
+
     app.dependency_overrides[database.get_db_session] = override_get_db_session
     response = client.post("/fetch_and_store_trades_for_all_symbols")
     assert response.status_code == 500
     assert "DB error" in response.json()["detail"]
+
 
 def test_health_check_wrong_method():
     response = client.post("/health")
