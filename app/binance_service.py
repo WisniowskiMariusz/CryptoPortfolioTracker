@@ -177,12 +177,9 @@ def fetch_trades(symbol, start_time=None, end_time=None, limit=1000) -> list:
             return []
         return trades
     except ClientError as e:
-        print(f"Binance API error: {e.message}")
+        print(f"Binance API error: {str(e)}")
         raise e
-    except ClientError as e:
-        print(f"Binance API error: {e}")
-        raise e
-
+    
 def get_deposit_history(asset: str = None, start_time: int = None, end_time: int = None):
     client = get_binance_client()
     return client.deposit_history(asset=asset, startTime=start_time, endTime=end_time)

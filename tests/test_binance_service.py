@@ -139,17 +139,17 @@ def test_parse_klines_handles_non_numeric_price():
         bs.parse_klines(data, "BTCUSDT", "1h")
 
 
-@patch("app.binance_service.Client")
-def test_get_account_info_success(mock_client_cls):
+@patch("app.binance_service.Spot")
+def test_get_account_info_success(mock_spot_cls):
     mock_client = MagicMock()
-    mock_client.get_account.return_value = {"balances": []}
-    mock_client_cls.return_value = mock_client
+    mock_client.account.return_value = {"balances": []}
+    mock_spot_cls.return_value = mock_client
     result = bs.get_account_info()
     assert "balances" in result
 
 
-@patch("app.binance_service.Client")
-def test_get_account_info_no_credentials(mock_client_cls, monkeypatch):
+@patch("app.binance_service.Spot")
+def test_get_account_info_no_credentials(mock_spot_cls, monkeypatch):
     monkeypatch.setattr(bs, "BINANCE_API_KEY", None)
     monkeypatch.setattr(bs, "BINANCE_API_SECRET", None)
     with pytest.raises(Exception, match="Binance API credentials not set"):
@@ -186,8 +186,8 @@ def test_parse_klines_handles_multiple_entries():
     assert parsed[1]["price"] == 31000.0
 
 
-@patch("app.binance_service.Client")
-def test_fetch_trades_returns_trades(mock_client_cls):
+@patch("app.binance_service.Spot")
+def test_fetch_trades_returns_trades(mock_spot_cls):
     mock_client = MagicMock()
     batch1 = [
         {
@@ -204,7 +204,7 @@ def test_fetch_trades_returns_trades(mock_client_cls):
         }
     ] * 1
     mock_client.get_my_trades.side_effect = [batch1, batch2, []]
-    mock_client_cls.return_value = mock_client
+    mock_spot_cls.return_value = mock_client
 
     trades = bs.fetch_trades("BTCUSDT", limit=2)
     assert len(trades) == 3
@@ -212,17 +212,17 @@ def test_fetch_trades_returns_trades(mock_client_cls):
     assert trades[2]["price"] == 200.0
 
 
-@patch("app.binance_service.Client")
-def test_fetch_trades_returns_empty(mock_client_cls):
+@patch("app.binance_service.Spot")
+def test_fetch_trades_returns_empty(mock_spot_cls):
     mock_client = MagicMock()
     mock_client.get_my_trades.return_value = []
-    mock_client_cls.return_value = mock_client
+    mock_spot_cls.return_value = mock_client
     trades = bs.fetch_trades("BTCUSDT")
     assert trades == []
 
 
-@patch("app.binance_service.Client")
-def test_fetch_trades_with_start_and_end_time(mock_client_cls):
+@patch("app.binance_service.Spot")
+def test_fetch_trades_with_start_and_end_time(mock_spot_cls):
     mock_client = MagicMock()
     batch = [{
         "id": 1, "symbol": "BTCUSDT", "orderId": 100, "price": "100.0", "qty": "0.1",
@@ -230,14 +230,14 @@ def test_fetch_trades_with_start_and_end_time(mock_client_cls):
         "isBuyer": True, "isMaker": False, "isBestMatch": True
     }]
     mock_client.get_my_trades.side_effect = [batch, []]
-    mock_client_cls.return_value = mock_client
+    mock_spot_cls.return_value = mock_client
     trades = bs.fetch_trades("BTCUSDT", start_time=123, end_time=456)
     assert len(trades) == 1
     assert trades[0]["symbol"] == "BTCUSDT"
 
 
-@patch("app.binance_service.Client")
-def test_fetch_trades_handles_non_bool_flags(mock_client_cls):
+@patch("app.binance_service.Spot")
+def test_fetch_trades_handles_non_bool_flags(mock_spot_cls):
     mock_client = MagicMock()
     batch = [{
         "id": 1, "symbol": "BTCUSDT", "orderId": 100, "price": "100.0", "qty": "0.1",
@@ -245,15 +245,15 @@ def test_fetch_trades_handles_non_bool_flags(mock_client_cls):
         "isBuyer": "1", "isMaker": "0", "isBestMatch": "1"
     }]
     mock_client.get_my_trades.side_effect = [batch, []]
-    mock_client_cls.return_value = mock_client
+    mock_spot_cls.return_value = mock_client
     trades = bs.fetch_trades("BTCUSDT")
     assert trades[0]["isBuyer"] == 1
     assert trades[0]["isMaker"] == 0
     assert trades[0]["isBestMatch"] == 1
 
 
-@patch("app.binance_service.Client")
-def test_fetch_trades_with_partial_batch(mock_client_cls):
+@patch("app.binance_service.Spot")
+def test_fetch_trades_with_partial_batch(mock_spot_cls):
     mock_client = MagicMock()
     batch = [{
         "id": 1, "symbol": "BTCUSDT", "orderId": 100, "price": "100.0", "qty": "0.1",
@@ -261,13 +261,13 @@ def test_fetch_trades_with_partial_batch(mock_client_cls):
         "isBuyer": True, "isMaker": False, "isBestMatch": True
     }]
     mock_client.get_my_trades.side_effect = [batch, []]
-    mock_client_cls.return_value = mock_client
+    mock_spot_cls.return_value = mock_client
     trades = bs.fetch_trades("BTCUSDT")
     assert len(trades) == 1
 
 
-@patch("app.binance_service.Client")
-def test_fetch_trades_with_multiple_batches(mock_client_cls):
+@patch("app.binance_service.Spot")
+def test_fetch_trades_with_multiple_batches(mock_spot_cls):
     mock_client = MagicMock()
     batch1 = [{
         "id": 1, "symbol": "BTCUSDT", "orderId": 100, "price": "100.0", "qty": "0.1",
@@ -280,24 +280,24 @@ def test_fetch_trades_with_multiple_batches(mock_client_cls):
         "isBuyer": False, "isMaker": True, "isBestMatch": False
     }] * 500
     mock_client.get_my_trades.side_effect = [batch1, batch2, []]
-    mock_client_cls.return_value = mock_client
+    mock_spot_cls.return_value = mock_client
     trades = bs.fetch_trades("BTCUSDT")
     assert len(trades) == 1500
     assert trades[0]["price"] == 100.0
     assert trades[1000]["price"] == 200.0
 
 
-@patch("app.binance_service.Client")
-def test_fetch_trades_binance_api_exception(mock_client_cls):
-    from binance.exceptions import BinanceAPIException
+@patch("app.binance_service.Spot")
+def test_fetch_trades_binance_api_exception(mock_spot_cls):
+    from binance.error import ClientError
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.text = "error"
-    mock_client.get_my_trades.side_effect = BinanceAPIException(
-        mock_response, 400, "error"
+    mock_client.get_my_trades.side_effect = ClientError(
+        mock_response, 400, "error", {}
     )
-    mock_client_cls.return_value = mock_client
-    with pytest.raises(BinanceAPIException):
+    mock_spot_cls.return_value = mock_client
+    with pytest.raises(ClientError):
         bs.fetch_trades("BTCUSDT")
 
 

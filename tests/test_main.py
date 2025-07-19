@@ -348,7 +348,7 @@ def test_upload_csv_db_error():
     assert response.status_code == 500
     assert "Database error" in response.json()["detail"]
 
-@patch("app.main.to_datetime")
+@patch("app.main.datetime_from_str")
 def test_fetch_and_store_trades_for_all_symbols_db_error(mock_to_datetime):
     mock_to_datetime.side_effect = Exception("fail")
     response = client.post("/fetch_and_store_trades_for_all_symbols")
