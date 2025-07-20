@@ -38,7 +38,7 @@ class TradesFromApi(Base):
     is_buyer = Column(Integer, name="isBuyer")  # 0 or 1
     is_maker = Column(Integer, name="isMaker")  # 0 or 1
     is_best_match = Column(Integer, name="isBestMatch")  # 0 or 1
-    __table_args__ = PrimaryKeyConstraint("id", "symbol", name="pk_id_symbol")
+    __table_args__ = (PrimaryKeyConstraint("id", "symbol", name="pk_id_symbol"),)
 
 
 class TradesFromXlsx(Base):

@@ -1,3 +1,4 @@
+import keyring.errors
 import requests
 import time
 import keyring
@@ -14,8 +15,23 @@ from binance.error import ClientError
 
 
 BINANCE_API_URL = "https://api.binance.com/api/v3/"
-BINANCE_API_KEY = keyring.get_password("binance_CherryWallet_api", "api_key")
-BINANCE_API_SECRET = keyring.get_password("binance_CherryWallet_api", "api_secret")
+
+
+def get_binance_credentials():
+    """
+    Fetches Binance API credentials.
+    """
+
+    try:
+        return (
+            keyring.get_password("binance_CherryWallet_api", "api_key"),
+            keyring.get_password("binance_CherryWallet_api", "api_secret"),
+        )
+    except keyring.errors.NoKeyringError:
+        return "fake_api_key", "fake_api_secret"
+
+
+BINANCE_API_KEY, BINANCE_API_SECRET = get_binance_credentials()
 
 
 def get_binance_client() -> Spot:
