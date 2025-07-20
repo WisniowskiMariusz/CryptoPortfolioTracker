@@ -1,53 +1,54 @@
-from app import crud
+import pytest
+from datetime import datetime, UTC
+from unittest.mock import MagicMock
+from app import models
+from app.crud import candle_exists, create_candle
 
-class DummyQuery:
-    def __init__(self, exists):
-        self._exists = exists
-    def filter(self, *a, **kw): return self
-    def first(self): return object() if self._exists else None
 
-class DummySession:
-    def __init__(self, exists=False):
-        self._exists = exists
-        self.added = []
-        self.committed = False
-        self.refreshed = []
-    def query(self, *a, **kw): return DummyQuery(self._exists)
-    def add(self, obj): self.added.append(obj)
-    def commit(self): self.committed = True
-    def refresh(self, obj): self.refreshed.append(obj)
+@pytest.fixture
+def mock_session():
+    return MagicMock()
 
-class DummyPriceHistory:
-    def __init__(self, symbol, interval, time, price, source):
-        self.symbol = symbol
-        self.interval = interval
-        self.time = time
-        self.price = price
-        self.source = source
 
-def test_candle_exists_true():
-    session = DummySession(exists=True)
-    result = crud.candle_exists(session, "BTCUSDT", "1d", "2024-01-01T00:00:00")
+def test_candle_exists_true(mock_session):
+    mock_query = MagicMock()
+    mock_filter = MagicMock()
+    mock_session.query.return_value = mock_query
+    mock_query.filter.return_value = mock_filter
+    mock_filter.first.return_value = models.PriceHistory()
+
+    result = candle_exists(mock_session, "BTCUSDT", "1m", datetime.now(UTC))
+
     assert result is True
+    mock_session.query.assert_called_once_with(models.PriceHistory)
 
-def test_candle_exists_false():
-    session = DummySession(exists=False)
-    result = crud.candle_exists(session, "BTCUSDT", "1d", "2024-01-01T00:00:00")
+
+def test_candle_exists_false(mock_session):
+    mock_session.query().filter().first.return_value = None
+
+    result = candle_exists(mock_session, "BTCUSDT", "1m", datetime.now(UTC))
+
     assert result is False
 
-def test_create_candle(monkeypatch):
-    # Patch models.PriceHistory to DummyPriceHistory
-    monkeypatch.setattr("app.models.PriceHistory", DummyPriceHistory)
-    session = DummySession()
-    candle = {
+
+def test_create_candle(mock_session):
+    # Arrange
+    candle_data = {
         "symbol": "BTCUSDT",
-        "interval": "1d",
-        "time": "2024-01-01T00:00:00",
-        "price": 42000.0,
-        "source": "binance"
+        "interval": "1m",
+        "time": datetime.now(UTC),
+        "price": 30000.5,
     }
-    db_candle = crud.create_candle(session, candle)
-    assert isinstance(db_candle, DummyPriceHistory)
-    assert session.added[0] == db_candle
-    assert session.committed is True
-    assert session.refreshed[0] == db_candle
+
+    # Act
+    result = create_candle(mock_session, candle_data)
+
+    # Assert
+    assert isinstance(result, models.PriceHistory)
+    assert result.symbol == candle_data["symbol"]
+    assert result.interval == candle_data["interval"]
+    assert result.price == candle_data["price"]
+
+    mock_session.add.assert_called_once()
+    mock_session.commit.assert_called_once()
+    mock_session.refresh.assert_called_once_with(result)

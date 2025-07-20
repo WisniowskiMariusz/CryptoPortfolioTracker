@@ -199,4 +199,4 @@ crypto-tracker.db
 crypto_tracker.db
 
 # VS Code workspace settings
-.vscode/settings.json
+.vscode/

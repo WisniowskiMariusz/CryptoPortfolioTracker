@@ -13,7 +13,11 @@ class Database:
         use_sql = os.getenv("USE_SQL_SERVER", "true").lower() == "true"
         if use_sql:
             self.engine: Engine = create_engine(
-                url="mssql+pyodbc://localhost/crypto-tracker?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=no&TrustServerCertificate=yes"
+                url=(
+                    "mssql+pyodbc://localhost/crypto-tracker?"
+                    "driver=ODBC+Driver+18+for+SQL+Server"
+                    "&Encrypt=no&TrustServerCertificate=yes"
+                )
             )
         else:
             self.engine: Engine = create_engine(
@@ -40,7 +44,8 @@ class Database:
                 (trade.get("id"), trade.get("symbol")) for trade in trades
             )
             print(
-                f"Incoming keys: {list(incoming_trades)[:5]}... (total {len(incoming_trades)})"
+                f"Incoming keys: {list(incoming_trades)[:5]}... "
+                f"(total {len(incoming_trades)})"
             )
             existing_trades = set()
             batch_size = 50
@@ -61,7 +66,8 @@ class Database:
                 )
                 existing_trades.update(rows)
             print(
-                f"Existing keys: {list(existing_trades)[:5]}... (total {len(existing_trades)})"
+                f"Existing keys: {list(existing_trades)[:5]}... "
+                f"(total {len(existing_trades)})"
             )
             unique_trades = [
                 models.create_model_instance_from_dict(
@@ -71,7 +77,8 @@ class Database:
                 if (trade.get("id"), trade.get("symbol")) not in existing_trades
             ]
             print(
-                f"Unique trades to insert: {unique_trades[:5]}... (total {len(unique_trades)})"
+                f"Unique trades to insert: {unique_trades[:5]}... "
+                f"(total {len(unique_trades)})"
             )
             db_session.bulk_save_objects(unique_trades)
             db_session.commit()
@@ -155,7 +162,7 @@ class Database:
             ]
             db_session.bulk_save_objects(unique_withdrawals)
             db_session.commit()
-            print(f"Stored {len(unique_withdrawals)} withdrawals in the database.")
+            print(f"Stored {len(unique_withdrawals)} " "withdrawals in the database.")
             return len(unique_withdrawals)
         except SQLAlchemyError as e:
             db_session.rollback()

@@ -16,7 +16,7 @@ from app.binance_service import (
     fetch_trades,
     get_account_info,
     get_deposit_history,
-    get_withdraw_history,    
+    get_withdraw_history,
     get_all_deposits,
     get_all_withdrawals,
     get_dust_log,
@@ -25,7 +25,6 @@ from app.binance_service import (
     get_flexible_product_position,
 )
 from app.tools import datetime_from_str, timestamp_from_str
-
 
 load_dotenv()
 
@@ -50,15 +49,23 @@ def get_account():
 
 
 @app.get("/get_deposits")
-def get_deposits(asset: str = None, start_time: int = 1625090462000, end_time: int = 1627761600000):
+def get_deposits(
+    asset: str = None,
+    start_time: int = 1625090462000,
+    end_time: int = 1627761600000,
+):
     try:
         return get_deposit_history(asset, start_time, end_time)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 
 @app.get("/get_withdrawals")
-def get_withdrawals(asset: str = None, start_time: int = 1679180400000, end_time: int = 1683756000000):
+def get_withdrawals(
+    asset: str = None,
+    start_time: int = 1679180400000,
+    end_time: int = 1683756000000,
+):
     try:
         return get_withdraw_history(asset, start_time, end_time)
     except Exception as e:
@@ -70,24 +77,23 @@ def get_earnings(
     lending_type: str = "DAILY",
     asset: str = None,
     start_time: int = None,
-    end_time: int = None,        
-    limit: int = 1000
+    end_time: int = None,
+    limit: int = 1000,
 ):
     """
     Returns earned interest history from Binance Flexible Savings.
     If union=True, uses the union interest history endpoint.
     """
-    try:        
+    try:
         return get_lending_interest_history(
             lending_type=lending_type,
             asset=asset,
             start_time=start_time,
             end_time=end_time,
-            limit=limit
+            limit=limit,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @app.get("/get_dust_conversion_history")
@@ -103,16 +109,18 @@ def get_dust_conversion_history():
 
 # ------------------- POST endpoints below -------------------
 
+
 @app.post("/fetch_and_store_prices")
 def fetch_prices_endpoint(
     db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query(
         default="1d",
-        description="Price interval: (1,3,5,15,30)m, (1,2,4,6,8,12)h, (1,3)d, 1w, 1M",
+        description=("Price interval: (1,3,5,15,30)m, (1,2,4,6,8,12)h, (1,3)d, 1w, 1M"),
     ),
     start_time: str | None = Query(
-        default=None, description="YYYY-MM-DD HH:MM format or UNIX timestamp in ms"
+        default=None,
+        description="YYYY-MM-DD HH:MM format or UNIX timestamp in ms",
     ),
     end_time: str | None = Query(
         default="2025-05-01 00:00",
@@ -155,14 +163,21 @@ def fetch_prices_stream_endpoint(
     max_requests: int = Query(
         0,
         ge=0,
-        description="Number of requests (batchów) do wykonania; 0 = do końca dostępnych danych",
+        description=(
+            "Number of requests (batches) to execute; "
+            "0 = until the end of available data"
+        ),
     ),
 ):
     start = time.perf_counter()
     total_saved = 0
     total_fetched = 0
     for prices_batch in fetch_prices_stream(
-        symbol, interval, batch_size=1000, end_time=end_time, max_requests=max_requests
+        symbol,
+        interval,
+        batch_size=1000,
+        end_time=end_time,
+        max_requests=max_requests,
     ):
         for price in prices_batch:
             if not crud.candle_exists(
@@ -173,7 +188,14 @@ def fetch_prices_stream_endpoint(
         total_fetched += len(prices_batch)
     elapsed = time.perf_counter() - start
     return {
-        "message": f"Fetched {total_fetched} prices from stream, saved {total_saved} to database. Elapsed time: {int(elapsed) // 3600:02d}:{int(elapsed) % 3600 // 60:02d}:{int(elapsed) % 60:02d}."
+        "message": (
+            f"Fetched {total_fetched} prices from stream, "
+            f"saved {total_saved} to database. "
+            f"Elapsed time: "
+            f"{int(elapsed) // 3600:02d}:"
+            f"{int(elapsed) % 3600 // 60:02d}:"
+            f"{int(elapsed) % 60:02d}."
+        )
     }
 
 
@@ -191,15 +213,12 @@ async def get_binance_trades(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     print(f"Fetched {len(trades)} trades for symbol {symbol}.")
-    # print(f"Trades: {trades}")
     if not trades:
         raise HTTPException(
             status_code=404, detail="No trades found for the specified symbol."
         )
-    # Store trades in the database
     stored_trades = database.store_trades(db=db_session, trades=trades)
     print(f"Stored {len(stored_trades)} trades for symbol {symbol}.")
-    # Optionally, return the stored trades or the fetched trades
     return {
         "Stored trades": len(stored_trades),
         "Fetched trades": len(trades),
@@ -214,7 +233,6 @@ async def fetch_and_store_trades_for_all_symbols(
     end_time: str = Query(None, description="End date in YYYY-MM-DD format"),
 ):
     try:
-        # Pobierz unikalne pary z bazy
         start_dt = datetime_from_str(start_time)
         end_dt = datetime_from_str(end_time)
         filters_for_xlsx = []
@@ -231,9 +249,7 @@ async def fetch_and_store_trades_for_all_symbols(
             .distinct()
             .all()
         )
-        symbols_from_xlsx: set = set(
-            [row[0].replace("/", "") for row in pairs_from_xlsx]
-        )
+        symbols_from_xlsx = set(row[0].replace("/", "") for row in pairs_from_xlsx)
         print(f"Unique pairs found in XLSX: {symbols_from_xlsx}")
         pairs_from_csv = (
             db_session.query(models.TradesFromCsv.pair)
@@ -241,7 +257,7 @@ async def fetch_and_store_trades_for_all_symbols(
             .distinct()
             .all()
         )
-        symbols_from_csv: set = set([row[0] for row in pairs_from_csv])
+        symbols_from_csv = set(row[0] for row in pairs_from_csv)
         print(f"Unique pairs found in CSV: {symbols_from_csv}")
         symbols = list(symbols_from_xlsx | symbols_from_csv)
         print(f"Unique pairs found in database: {symbols}")
@@ -259,7 +275,10 @@ async def fetch_and_store_trades_for_all_symbols(
     stored_trades = database.store_trades(db_session=db_session, trades=results)
     if not results:
         raise HTTPException(status_code=404, detail="No trades found for any symbol.")
-    return {"Stored trades": len(stored_trades), "Fetched trades": len(results)}
+    return {
+        "Stored trades": len(stored_trades),
+        "Fetched trades": len(results),
+    }
 
 
 @app.post("/fetch_and_store_all_deposits")
@@ -270,7 +289,8 @@ def fetch_and_store_all_deposits(
     db_session: Session = Depends(database.get_db_session),
 ):
     """
-    Fetches all deposits from Binance (with pagination) and stores unique ones in the database.
+    Fetches all deposits from Binance (with pagination)
+    and stores unique ones in the database.
     Returns both the number fetched and the number actually stored.
     """
     result = get_all_deposits(
@@ -291,8 +311,9 @@ def fetch_and_store_all_withdrawals(
     db_session: Session = Depends(database.get_db_session),
 ):
     """
-    Fetches all withdrawals from Binance (with pagination) and stores unique ones in the database.
-    Returns both the number fetched and the number actually stored.
+    Fetches all withdrawals from Binance (with pagination) and stores unique
+    ones in the database. Returns both the number fetched and the number
+    actually stored.
     """
     result = get_all_withdrawals(
         asset=asset, earliest_date=earliest_date, latest_date=latest_date
@@ -330,9 +351,10 @@ async def upload_xlsx(
         "Fee Coin",
     }
     if not required_columns.issubset(df.columns):
+        missing = required_columns - set(df.columns)
         raise HTTPException(
             status_code=400,
-            detail=f"Missing required columns: {required_columns - set(df.columns)}",
+            detail=f"Missing required columns: {missing}",
         )
     records = []
     for _, row in df.iterrows():
@@ -342,7 +364,7 @@ async def upload_xlsx(
                 pair=row["Pair"],
                 base_asset=row["Base Asset"],
                 quote_asset=row["Quote Asset"],
-                type=row["Type"].lower(),  # Ensure type is lowercase
+                type=row["Type"].lower(),
                 price=float(row["Price"]),
                 amount=float(row["Amount"]),
                 total=float(row["Total"]),
@@ -383,9 +405,9 @@ async def upload_csv(
         "Fee",
     }
     if not required_columns.issubset(df.columns):
+        missing = required_columns - set(df.columns)
         raise HTTPException(
-            status_code=400,
-            detail=f"Missing required columns: {required_columns - set(df.columns)}",
+            status_code=400, detail=f"Missing required columns: {missing}"
         )
 
     records = []
@@ -420,7 +442,7 @@ def flexible_redemption_record(
     start_time: int = None,
     end_time: int = None,
     current: int = 1,
-    size: int = 10
+    size: int = 10,
 ):
     try:
         return get_flexible_redemption_record(
@@ -430,7 +452,7 @@ def flexible_redemption_record(
             start_time=start_time,
             end_time=end_time,
             current=current,
-            size=size
+            size=size,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
