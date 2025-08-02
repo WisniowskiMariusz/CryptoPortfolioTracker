@@ -10,23 +10,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import database
 from app import models, crud
-from app.binance_service import (
-    fetch_prices,
-    fetch_prices_stream,
-    fetch_trades,
-    get_account_info,
-    get_deposit_history,
-    get_withdraw_history,
-    get_all_deposits,
-    get_all_withdrawals,
-    get_dust_log,
-    get_lending_interest_history,
-    get_flexible_redemption_record,
-    get_flexible_product_position,
-)
+from app.binance_service import BinanceService
 from app.tools import datetime_from_str, timestamp_from_str
+from app.dependencies import get_binance_service
 
 load_dotenv()
+
 
 app = FastAPI(
     title="CryptoPortfolioTracker API",
@@ -41,39 +30,44 @@ def health_check():
 
 
 @app.get("/get_account")
-def get_account():
+def get_account(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+):
     try:
-        return get_account_info()
+        return binance_service.get_account_info()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/get_deposits")
 def get_deposits(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     asset: str = None,
     start_time: int = 1625090462000,
     end_time: int = 1627761600000,
 ):
     try:
-        return get_deposit_history(asset, start_time, end_time)
+        return binance_service.get_deposit_history(asset, start_time, end_time)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/get_withdrawals")
 def get_withdrawals(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     asset: str = None,
     start_time: int = 1679180400000,
     end_time: int = 1683756000000,
 ):
     try:
-        return get_withdraw_history(asset, start_time, end_time)
+        return binance_service.get_withdraw_history(asset, start_time, end_time)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/get_earnings")
 def get_earnings(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     lending_type: str = "DAILY",
     asset: str = None,
     start_time: int = None,
@@ -85,7 +79,7 @@ def get_earnings(
     If union=True, uses the union interest history endpoint.
     """
     try:
-        return get_lending_interest_history(
+        return binance_service.get_lending_interest_history(
             lending_type=lending_type,
             asset=asset,
             start_time=start_time,
@@ -97,12 +91,14 @@ def get_earnings(
 
 
 @app.get("/get_dust_conversion_history")
-def get_dust_conversion_history():
+def get_dust_conversion_history(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+):
     """
     Returns small-balance (dust) conversion history from Binance.
     """
     try:
-        return get_dust_log()
+        return binance_service.get_dust_log()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -112,6 +108,7 @@ def get_dust_conversion_history():
 
 @app.post("/fetch_and_store_prices")
 def fetch_prices_endpoint(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query(
@@ -130,7 +127,7 @@ def fetch_prices_endpoint(
         1000, ge=1, le=1000, description="Number of prices to fetch (max 1000)"
     ),
 ):
-    prices = fetch_prices(symbol, interval, start_time, end_time, limit)
+    prices = binance_service.fetch_prices(symbol, interval, start_time, end_time, limit)
     if not prices:
         raise HTTPException(status_code=404, detail="No prices found")
 
@@ -154,6 +151,7 @@ def fetch_prices_endpoint(
 
 @app.post("/fetch_and_store_prices_stream")
 def fetch_prices_stream_endpoint(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query("BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query("1d", description="Price interval, e.g. 1m, 1h, 1d"),
@@ -172,7 +170,7 @@ def fetch_prices_stream_endpoint(
     start = time.perf_counter()
     total_saved = 0
     total_fetched = 0
-    for prices_batch in fetch_prices_stream(
+    for prices_batch in binance_service.fetch_prices_stream(
         symbol,
         interval,
         batch_size=1000,
@@ -201,6 +199,7 @@ def fetch_prices_stream_endpoint(
 
 @app.post("/fetch_and_store_trades")
 async def get_binance_trades(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     start_time: str = Query(None, description="Start date in YYYY-MM-DD format"),
@@ -209,7 +208,7 @@ async def get_binance_trades(
     start_ts = timestamp_from_str(start_time)
     end_ts = timestamp_from_str(end_time)
     try:
-        trades = fetch_trades(symbol, start_ts, end_ts)
+        trades = binance_service.fetch_trades(symbol, start_ts, end_ts)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     print(f"Fetched {len(trades)} trades for symbol {symbol}.")
@@ -228,6 +227,7 @@ async def get_binance_trades(
 
 @app.post("/fetch_and_store_trades_for_all_symbols")
 async def fetch_and_store_trades_for_all_symbols(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     db_session: Annotated[Session, Depends(database.get_db_session)],
     start_time: str = Query(None, description="Start date in YYYY-MM-DD format"),
     end_time: str = Query(None, description="End date in YYYY-MM-DD format"),
@@ -265,7 +265,7 @@ async def fetch_and_store_trades_for_all_symbols(
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
     results = []
     for symbol in symbols:
-        data = fetch_trades(
+        data = binance_service.fetch_trades(
             symbol=symbol,
             start_time=timestamp_from_str(start_time),
             end_time=timestamp_from_str(end_time),
@@ -283,6 +283,7 @@ async def fetch_and_store_trades_for_all_symbols(
 
 @app.post("/fetch_and_store_all_deposits")
 def fetch_and_store_all_deposits(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     asset: str | None = None,
     earliest_date: str = "2017-07-01",
     latest_date: str | None = None,
@@ -293,7 +294,7 @@ def fetch_and_store_all_deposits(
     and stores unique ones in the database.
     Returns both the number fetched and the number actually stored.
     """
-    result = get_all_deposits(
+    result = binance_service.get_all_deposits(
         asset=asset, earliest_date=earliest_date, latest_date=latest_date
     )
     if result["status"] != "success":
@@ -305,6 +306,7 @@ def fetch_and_store_all_deposits(
 
 @app.post("/fetch_and_store_all_withdrawals")
 def fetch_and_store_all_withdrawals(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     asset: str | None = None,
     earliest_date: str = "2017-07-01",
     latest_date: str | None = None,
@@ -315,7 +317,7 @@ def fetch_and_store_all_withdrawals(
     ones in the database. Returns both the number fetched and the number
     actually stored.
     """
-    result = get_all_withdrawals(
+    result = binance_service.get_all_withdrawals(
         asset=asset, earliest_date=earliest_date, latest_date=latest_date
     )
     if result["status"] != "success":
@@ -436,6 +438,7 @@ async def upload_csv(
 
 @app.get("/simple_earn/flexible/redemption_record")
 def flexible_redemption_record(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     product_id: str = None,
     redeem_id: str = None,
     asset: str = None,
@@ -445,7 +448,7 @@ def flexible_redemption_record(
     size: int = 10,
 ):
     try:
-        return get_flexible_redemption_record(
+        return binance_service.get_flexible_redemption_record(
             product_id=product_id,
             redeem_id=redeem_id,
             asset=asset,
@@ -459,11 +462,14 @@ def flexible_redemption_record(
 
 
 @app.get("/simple_earn/flexible/position")
-def simple_earn_flexible_position(asset: str = None):
+def simple_earn_flexible_position(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+    asset: str = None,
+):
     """
     Returns current Simple Earn Flexible positions from Binance.
     """
     try:
-        return get_flexible_product_position(asset=asset)
+        return binance_service.get_flexible_product_position(asset=asset)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
