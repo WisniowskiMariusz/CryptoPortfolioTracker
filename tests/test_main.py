@@ -18,9 +18,8 @@ def test_health_check():
     assert response.json() == {"status": "ok"}
 
 
-@patch("app.main.fetch_prices")
 @patch("app.main.crud")
-def test_fetch_prices_endpoint_success(mock_crud, mock_fetch_prices):
+def test_fetch_prices_endpoint_success(mock_crud, mocked_binance_service_instance):
     mock_price = {
         "symbol": "BTCUSDT",
         "interval": "1d",
@@ -28,7 +27,8 @@ def test_fetch_prices_endpoint_success(mock_crud, mock_fetch_prices):
         "price": 42000.0,
         "source": "binance",
     }
-    mock_fetch_prices.return_value = [mock_price] * 2
+    mocked_binance_service_instance.fetch_prices.return_value = [mock_price] * 2
+    # mock_fetch_prices.return_value = [mock_price] * 2
     mock_crud.candle_exists.return_value = False
     mock_crud.create_candle.return_value = None
 
@@ -37,17 +37,15 @@ def test_fetch_prices_endpoint_success(mock_crud, mock_fetch_prices):
     assert "Fetched 2 prices, saved 2" in response.json()["message"]
 
 
-@patch("app.main.fetch_prices")
-def test_fetch_prices_endpoint_no_data(mock_fetch_prices):
-    mock_fetch_prices.return_value = []
+def test_fetch_prices_endpoint_no_data(mocked_binance_service_instance):
+    mocked_binance_service_instance.fetch_prices.return_value = []
     response = client.post("/fetch_and_store_prices")
     assert response.status_code == 404
     assert response.json()["detail"] == "No prices found"
 
 
-@patch("app.main.fetch_prices_stream")
 @patch("app.main.crud")
-def test_fetch_prices_stream_endpoint(mock_crud, mock_fetch_prices_stream):
+def test_fetch_prices_stream_endpoint(mock_crud, mocked_binance_service_instance):
     mock_price = {
         "symbol": "BTCUSDT",
         "interval": "1d",
@@ -57,7 +55,9 @@ def test_fetch_prices_stream_endpoint(mock_crud, mock_fetch_prices_stream):
     }
 
     # Simulate one batch of 2 prices
-    mock_fetch_prices_stream.return_value = iter([[mock_price, mock_price]])
+    mocked_binance_service_instance.fetch_prices_stream.return_value = iter(
+        [[mock_price, mock_price]]
+    )
     mock_crud.candle_exists.return_value = False
     mock_crud.create_candle.return_value = None
 
@@ -69,26 +69,132 @@ def test_fetch_prices_stream_endpoint(mock_crud, mock_fetch_prices_stream):
     )
 
 
-@patch("app.main.get_account_info")
-def test_get_account_success(mock_get_account_info):
-    mock_get_account_info.return_value = {"balances": []}
+def test_get_deposits_success(mocked_binance_service_instance):
+    mock_response = {"status": "success", "data": [], "count": 0}
+    mocked_binance_service_instance.get_deposit_history.return_value = mock_response
+    response = client.get(
+        "/get_deposits",
+        params={
+            "asset": "BTC",
+            "start_time": 1625090462000,
+            "end_time": 1627761600000,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == mock_response
+    mocked_binance_service_instance.get_deposit_history.assert_called_once_with(
+        "BTC", 1625090462000, 1627761600000
+    )
+
+
+def test_get_deposits_exception(mocked_binance_service_instance):
+    mocked_binance_service_instance.get_deposit_history.side_effect = Exception(
+        "Something went wrong"
+    )
+    response = client.get("/get_deposits")
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Something went wrong"}
+
+
+def test_get_withdrawals_success(mocked_binance_service_instance):
+    mock_response = {"status": "success", "data": [], "count": 0}
+    mocked_binance_service_instance.get_withdraw_history.return_value = mock_response
+    response = client.get(
+        "/get_withdrawals",
+        params={
+            "asset": "BTC",
+            "start_time": 1625090462000,
+            "end_time": 1627761600000,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == mock_response
+    mocked_binance_service_instance.get_withdraw_history.assert_called_once_with(
+        "BTC", 1625090462000, 1627761600000
+    )
+
+
+def test_get_withrawals_exception(mocked_binance_service_instance):
+    mocked_binance_service_instance.get_withdraw_history.side_effect = Exception(
+        "Something went wrong"
+    )
+    response = client.get("/get_withdrawals")
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Something went wrong"}
+
+
+def test_get_account_success(mocked_binance_service_instance):
+    mocked_binance_service_instance.get_account_info.return_value = {"balances": []}
     response = client.get("/get_account")
     assert response.status_code == 200
     assert response.json() == {"balances": []}
 
 
-@patch("app.main.get_account_info")
-def test_get_account_error(mock_get_account_info):
-    mock_get_account_info.side_effect = Exception("fail")
+def test_get_account_error(mocked_binance_service_instance):
+    mocked_binance_service_instance.get_account_info.side_effect = Exception("fail")
     response = client.get("/get_account")
     assert response.status_code == 500
     assert response.json()["detail"] == "fail"
 
 
-@patch("app.main.fetch_trades")
+def test_get_earnings_success(mocked_binance_service_instance):
+    mock_response = {
+        "status": "success",
+        "count": 1,
+        "data": [{"asset": "BTC", "interest": "0.0001"}],
+    }
+    mocked_binance_service_instance.get_lending_interest_history.return_value = (
+        mock_response
+    )
+    response = client.get(
+        "/get_earnings",
+        params={
+            "lending_type": "DAILY",
+            "asset": "BTC",
+            "start_time": 1609459200000,
+            "end_time": 1612137600000,
+            "limit": 500,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == mock_response
+
+
+def test_get_earnings_error(mocked_binance_service_instance):
+    mocked_binance_service_instance.get_lending_interest_history.side_effect = (
+        Exception("Simulated failure")
+    )
+    response = client.get("/get_earnings")
+    assert response.status_code == 500
+    assert "Simulated failure" in response.json()["detail"]
+
+
+def test_get_dust_conversion_history_success(mocked_binance_service_instance):
+    mock_response = {
+        "status": "success",
+        "total_converted": "0.01",
+        "logs": [{"asset": "LTC", "amount": "0.1"}],
+    }
+    mocked_binance_service_instance.get_dust_log.return_value = mock_response
+    response = client.get("/get_dust_conversion_history")
+    assert response.status_code == 200
+    assert response.json() == mock_response
+
+
+def test_get_dust_conversion_history_error(mocked_binance_service_instance):
+    mocked_binance_service_instance.get_dust_log.side_effect = (
+        Exception("Simulated failure")
+    )
+    response = client.get("/get_dust_conversion_history")
+    assert response.status_code == 500
+    assert "Simulated failure" in response.json()["detail"]
+
+
 @patch("app.main.database")
-def test_fetch_and_store_trades_success(mock_database, mock_fetch_trades):
-    mock_fetch_trades.return_value = [{"id": 1, "symbol": "BTCUSDT"}]
+def test_fetch_and_store_trades_success(mock_database, mocked_binance_service_instance):
+    mocked_binance_service_instance.fetch_trades.return_value = [
+        {"id": 1, "symbol": "BTCUSDT"}
+    ]
     mock_database.store_trades.return_value = [object()]
     response = client.post("/fetch_and_store_trades")
     assert response.status_code == 200
@@ -96,17 +202,15 @@ def test_fetch_and_store_trades_success(mock_database, mock_fetch_trades):
     assert response.json()["Fetched trades"] == 1
 
 
-@patch("app.main.fetch_trades")
-def test_fetch_and_store_trades_no_trades(mock_fetch_trades):
-    mock_fetch_trades.return_value = []
+def test_fetch_and_store_trades_no_trades(mocked_binance_service_instance):
+    mocked_binance_service_instance.fetch_trades.return_value = []
     response = client.post("/fetch_and_store_trades")
     assert response.status_code == 404
     assert "No trades found" in response.json()["detail"]
 
 
-@patch("app.main.fetch_trades")
-def test_fetch_and_store_trades_exception(mock_fetch_trades):
-    mock_fetch_trades.side_effect = Exception("fail")
+def test_fetch_and_store_trades_exception(mocked_binance_service_instance):
+    mocked_binance_service_instance.fetch_trades.side_effect = Exception("fail")
     response = client.post("/fetch_and_store_trades")
     assert response.status_code == 500
     assert response.json()["detail"] == "fail"
