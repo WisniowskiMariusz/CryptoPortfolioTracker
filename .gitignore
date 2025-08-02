@@ -200,3 +200,6 @@ crypto_tracker.db
 
 # VS Code workspace settings
 .vscode/
+
+# Data files
+data_xlsx
