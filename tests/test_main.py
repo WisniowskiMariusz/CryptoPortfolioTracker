@@ -182,8 +182,8 @@ def test_get_dust_conversion_history_success(mocked_binance_service_instance):
 
 
 def test_get_dust_conversion_history_error(mocked_binance_service_instance):
-    mocked_binance_service_instance.get_dust_log.side_effect = (
-        Exception("Simulated failure")
+    mocked_binance_service_instance.get_dust_log.side_effect = Exception(
+        "Simulated failure"
     )
     response = client.get("/get_dust_conversion_history")
     assert response.status_code == 500
