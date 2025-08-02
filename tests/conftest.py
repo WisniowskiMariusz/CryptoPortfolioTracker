@@ -13,12 +13,13 @@ def mock_keyring(monkeypatch):
         if service_name == "only_api_key_correct":
             if username == "api_secret":
                 raise keyring.errors.KeyringError
-        elif service_name != "fake keyring system name":            
+        elif service_name != "fake keyring system name":
             raise keyring.errors.KeyringError
         if username == "api_key":
             return "fake_api_key"
         elif username == "api_secret":
             return "fake_api_secret"
+
     monkeypatch.setattr(keyring, "get_password", fake_get_password)
 
 
