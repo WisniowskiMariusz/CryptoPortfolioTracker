@@ -12,11 +12,10 @@ from app.database import database
 from app import models, crud
 from app.binance_service import BinanceService
 from app.tools import datetime_from_str, timestamp_from_str
+from app.dependencies import get_binance_service
 
 load_dotenv()
 
-# Initialize BinanceService
-binance_service = BinanceService()
 
 app = FastAPI(
     title="CryptoPortfolioTracker API",
@@ -31,7 +30,9 @@ def health_check():
 
 
 @app.get("/get_account")
-def get_account():
+def get_account(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+):
     try:
         return binance_service.get_account_info()
     except Exception as e:
@@ -40,6 +41,7 @@ def get_account():
 
 @app.get("/get_deposits")
 def get_deposits(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     asset: str = None,
     start_time: int = 1625090462000,
     end_time: int = 1627761600000,
@@ -52,6 +54,7 @@ def get_deposits(
 
 @app.get("/get_withdrawals")
 def get_withdrawals(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     asset: str = None,
     start_time: int = 1679180400000,
     end_time: int = 1683756000000,
@@ -64,6 +67,7 @@ def get_withdrawals(
 
 @app.get("/get_earnings")
 def get_earnings(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     lending_type: str = "DAILY",
     asset: str = None,
     start_time: int = None,
@@ -87,7 +91,9 @@ def get_earnings(
 
 
 @app.get("/get_dust_conversion_history")
-def get_dust_conversion_history():
+def get_dust_conversion_history(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+):
     """
     Returns small-balance (dust) conversion history from Binance.
     """
@@ -102,6 +108,7 @@ def get_dust_conversion_history():
 
 @app.post("/fetch_and_store_prices")
 def fetch_prices_endpoint(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query(
@@ -144,6 +151,7 @@ def fetch_prices_endpoint(
 
 @app.post("/fetch_and_store_prices_stream")
 def fetch_prices_stream_endpoint(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query("BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query("1d", description="Price interval, e.g. 1m, 1h, 1d"),
@@ -191,6 +199,7 @@ def fetch_prices_stream_endpoint(
 
 @app.post("/fetch_and_store_trades")
 async def get_binance_trades(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     db_session: Annotated[Session, Depends(database.get_db_session)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     start_time: str = Query(None, description="Start date in YYYY-MM-DD format"),
@@ -218,6 +227,7 @@ async def get_binance_trades(
 
 @app.post("/fetch_and_store_trades_for_all_symbols")
 async def fetch_and_store_trades_for_all_symbols(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     db_session: Annotated[Session, Depends(database.get_db_session)],
     start_time: str = Query(None, description="Start date in YYYY-MM-DD format"),
     end_time: str = Query(None, description="End date in YYYY-MM-DD format"),
@@ -273,6 +283,7 @@ async def fetch_and_store_trades_for_all_symbols(
 
 @app.post("/fetch_and_store_all_deposits")
 def fetch_and_store_all_deposits(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     asset: str | None = None,
     earliest_date: str = "2017-07-01",
     latest_date: str | None = None,
@@ -295,6 +306,7 @@ def fetch_and_store_all_deposits(
 
 @app.post("/fetch_and_store_all_withdrawals")
 def fetch_and_store_all_withdrawals(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     asset: str | None = None,
     earliest_date: str = "2017-07-01",
     latest_date: str | None = None,
@@ -426,6 +438,7 @@ async def upload_csv(
 
 @app.get("/simple_earn/flexible/redemption_record")
 def flexible_redemption_record(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
     product_id: str = None,
     redeem_id: str = None,
     asset: str = None,
@@ -449,7 +462,10 @@ def flexible_redemption_record(
 
 
 @app.get("/simple_earn/flexible/position")
-def simple_earn_flexible_position(asset: str = None):
+def simple_earn_flexible_position(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+    asset: str = None,
+):
     """
     Returns current Simple Earn Flexible positions from Binance.
     """

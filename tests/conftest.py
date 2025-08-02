@@ -1,10 +1,10 @@
-import os
 import pytest
 import keyring
 from unittest.mock import patch, MagicMock
 from app.binance_service import BinanceService
-
-os.environ["USE_SQL_SERVER"] = "false"
+from fastapi.testclient import TestClient
+from app.main import app
+from app import dependencies
 
 
 @pytest.fixture(autouse=True)
@@ -25,12 +25,12 @@ def mock_keyring(monkeypatch):
 
 @pytest.fixture
 def mocked_binance_service_instance():
-    with patch("app.main.binance_service") as mocked_bs_instance:
+    with patch("app.main.get_binance_service") as mocked_bs_instance:
         yield mocked_bs_instance
 
 
 @pytest.fixture
-def mocked_binance_service():
+def mocked_binance_service_tuple():
     mock_client = MagicMock()
 
     # This patch replaces the Spot class with your mock
@@ -41,5 +41,27 @@ def mocked_binance_service():
 
 
 @pytest.fixture
-def fake_binance_service(mocked_binance_service):
-    return mocked_binance_service[0]
+def fake_binance_service(mocked_binance_service_tuple):
+    return mocked_binance_service_tuple[0]
+
+
+@pytest.fixture
+def mocked_binance_client(mocked_binance_service_tuple):
+    return mocked_binance_service_tuple[1]
+
+
+@pytest.fixture
+def override_binance_dependency(mocked_binance_service_tuple):
+    service_instance, _ = mocked_binance_service_tuple
+
+    def _override():
+        return service_instance
+
+    app.dependency_overrides[dependencies.get_binance_service] = _override
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def test_client(override_binance_dependency):
+    return TestClient(app)

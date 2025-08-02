@@ -179,8 +179,8 @@ def test_parse_klines_handles_multiple_entries(fake_binance_service):
     assert parsed[1]["price"] == 31000.0
 
 
-def test_fetch_trades_returns_trades(mocked_binance_service):
-    fake_binance_service, mock_client = mocked_binance_service
+def test_fetch_trades_returns_trades(mocked_binance_service_tuple):
+    fake_binance_service, mock_client = mocked_binance_service_tuple
     batch1 = [
         {
             "id": 1,
@@ -221,15 +221,15 @@ def test_fetch_trades_returns_trades(mocked_binance_service):
     assert trades[2]["price"] == 200.0
 
 
-def test_fetch_trades_returns_empty(mocked_binance_service):
-    fake_binance_service, mock_client = mocked_binance_service
+def test_fetch_trades_returns_empty(mocked_binance_service_tuple):
+    fake_binance_service, mock_client = mocked_binance_service_tuple
     mock_client.my_trades.return_value = []
     trades = fake_binance_service.fetch_trades("BTCUSDT")
     assert trades == []
 
 
-def test_fetch_trades_with_start_and_end_time(mocked_binance_service):
-    fake_binance_service, mock_client = mocked_binance_service
+def test_fetch_trades_with_start_and_end_time(mocked_binance_service_tuple):
+    fake_binance_service, mock_client = mocked_binance_service_tuple
     batch = [
         {
             "id": 1,
@@ -252,8 +252,8 @@ def test_fetch_trades_with_start_and_end_time(mocked_binance_service):
     assert trades[0]["symbol"] == "BTCUSDT"
 
 
-def test_fetch_trades_handles_non_bool_flags(mocked_binance_service):
-    fake_binance_service, mock_client = mocked_binance_service
+def test_fetch_trades_handles_non_bool_flags(mocked_binance_service_tuple):
+    fake_binance_service, mock_client = mocked_binance_service_tuple
     batch = [
         {
             "id": 1,
@@ -277,8 +277,8 @@ def test_fetch_trades_handles_non_bool_flags(mocked_binance_service):
     assert trades[0]["isBestMatch"] == 1
 
 
-def test_fetch_trades_with_partial_batch(mocked_binance_service):
-    fake_binance_service, mock_client = mocked_binance_service
+def test_fetch_trades_with_partial_batch(mocked_binance_service_tuple):
+    fake_binance_service, mock_client = mocked_binance_service_tuple
     batch = [
         {
             "id": 1,
@@ -300,8 +300,8 @@ def test_fetch_trades_with_partial_batch(mocked_binance_service):
     assert len(trades) == 1
 
 
-def test_fetch_trades_with_multiple_batches(mocked_binance_service):
-    fake_binance_service, mock_client = mocked_binance_service
+def test_fetch_trades_with_multiple_batches(mocked_binance_service_tuple):
+    fake_binance_service, mock_client = mocked_binance_service_tuple
     batch1 = [
         {
             "id": 1,
@@ -341,8 +341,8 @@ def test_fetch_trades_with_multiple_batches(mocked_binance_service):
     assert trades[1000]["price"] == 200.0
 
 
-def test_fetch_trades_binance_api_exception(mocked_binance_service):
-    fake_binance_service, mock_client = mocked_binance_service
+def test_fetch_trades_binance_api_exception(mocked_binance_service_tuple):
+    fake_binance_service, mock_client = mocked_binance_service_tuple
     mock_response = MagicMock()
     mock_response.text = "error"
     mock_client.my_trades.side_effect = ClientError(mock_response, 400, "error", {})
