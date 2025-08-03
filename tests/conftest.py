@@ -3,8 +3,10 @@ import keyring
 from unittest.mock import patch, MagicMock
 from app.binance_service import BinanceService
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 from app.main import app
-from app import dependencies
+from app.dependencies import get_binance_service, get_db, get_db_session
+from app.database import Database
 
 
 @pytest.fixture(autouse=True)
@@ -57,7 +59,7 @@ def override_binance_dependency(mocked_binance_service_tuple):
     def _override():
         return service_instance
 
-    app.dependency_overrides[dependencies.get_binance_service] = _override
+    app.dependency_overrides[get_binance_service] = _override
     yield
     app.dependency_overrides.clear()
 
@@ -65,3 +67,30 @@ def override_binance_dependency(mocked_binance_service_tuple):
 @pytest.fixture
 def test_client(override_binance_dependency):
     return TestClient(app)
+
+
+@pytest.fixture
+def mocked_db_session():
+    return MagicMock(spec=Session)
+
+
+@pytest.fixture
+def override_get_db_session(mocked_db_session):
+    def _override():
+        yield mocked_db_session
+
+    app.dependency_overrides[get_db_session] = _override
+    yield mocked_db_session
+    app.dependency_overrides.pop(get_db_session, None)
+
+
+@pytest.fixture
+def mocked_db():
+    return MagicMock(spec=Database)
+
+
+@pytest.fixture
+def override_get_db(mocked_db, override_get_db_session):    
+    app.dependency_overrides[get_db] = lambda: mocked_db
+    yield mocked_db
+    app.dependency_overrides.pop(get_db, None)

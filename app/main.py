@@ -7,12 +7,11 @@ from io import BytesIO, StringIO
 from fastapi import FastAPI, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-
-from app.database import database
+from app.database import Database
 from app import models, crud
 from app.binance_service import BinanceService
 from app.tools import datetime_from_str, timestamp_from_str
-from app.dependencies import get_binance_service
+from app.dependencies import get_binance_service, get_db_session, get_db
 
 load_dotenv()
 
@@ -109,7 +108,7 @@ def get_dust_conversion_history(
 @app.post("/fetch_and_store_prices")
 def fetch_prices_endpoint(
     binance_service: Annotated[BinanceService, Depends(get_binance_service)],
-    db_session: Annotated[Session, Depends(database.get_db_session)],
+    db_session: Annotated[Session, Depends(get_db_session)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query(
         default="1d",
@@ -152,7 +151,7 @@ def fetch_prices_endpoint(
 @app.post("/fetch_and_store_prices_stream")
 def fetch_prices_stream_endpoint(
     binance_service: Annotated[BinanceService, Depends(get_binance_service)],
-    db_session: Annotated[Session, Depends(database.get_db_session)],
+    db_session: Annotated[Session, Depends(get_db_session)],
     symbol: str = Query("BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     interval: str = Query("1d", description="Price interval, e.g. 1m, 1h, 1d"),
     end_time: str | None = Query(
@@ -200,7 +199,8 @@ def fetch_prices_stream_endpoint(
 @app.post("/fetch_and_store_trades")
 async def get_binance_trades(
     binance_service: Annotated[BinanceService, Depends(get_binance_service)],
-    db_session: Annotated[Session, Depends(database.get_db_session)],
+    db_session: Annotated[Session, Depends(get_db_session)],
+    database: Annotated[Database, Depends(get_db)],
     symbol: str = Query(default="BTCUSDT", description="Trading symbol, e.g. BTCUSDT"),
     start_time: str = Query(None, description="Start date in YYYY-MM-DD format"),
     end_time: str = Query(None, description="End date in YYYY-MM-DD format"),
@@ -228,7 +228,8 @@ async def get_binance_trades(
 @app.post("/fetch_and_store_trades_for_all_symbols")
 async def fetch_and_store_trades_for_all_symbols(
     binance_service: Annotated[BinanceService, Depends(get_binance_service)],
-    db_session: Annotated[Session, Depends(database.get_db_session)],
+    db_session: Annotated[Session, Depends(get_db_session)],
+    database: Annotated[Database, Depends(get_db)],
     start_time: str = Query(None, description="Start date in YYYY-MM-DD format"),
     end_time: str = Query(None, description="End date in YYYY-MM-DD format"),
 ):
@@ -284,10 +285,11 @@ async def fetch_and_store_trades_for_all_symbols(
 @app.post("/fetch_and_store_all_deposits")
 def fetch_and_store_all_deposits(
     binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+    database: Annotated[Database, Depends(get_db)],
+    db_session: Annotated[Session, Depends(get_db_session)],
     asset: str | None = None,
     earliest_date: str = "2017-07-01",
-    latest_date: str | None = None,
-    db_session: Session = Depends(database.get_db_session),
+    latest_date: str | None = None,    
 ):
     """
     Fetches all deposits from Binance (with pagination)
@@ -307,10 +309,11 @@ def fetch_and_store_all_deposits(
 @app.post("/fetch_and_store_all_withdrawals")
 def fetch_and_store_all_withdrawals(
     binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+    database: Annotated[Database, Depends(get_db)],
+    db_session: Annotated[Session, Depends(get_db_session)],
     asset: str | None = None,
     earliest_date: str = "2017-07-01",
-    latest_date: str | None = None,
-    db_session: Session = Depends(database.get_db_session),
+    latest_date: str | None = None,    
 ):
     """
     Fetches all withdrawals from Binance (with pagination) and stores unique
@@ -329,7 +332,7 @@ def fetch_and_store_all_withdrawals(
 
 @app.post("/upload-xlsx")
 async def upload_xlsx(
-    db_session: Annotated[Session, Depends(database.get_db_session)],
+    db_session: Annotated[Session, Depends(get_db_session)],
     file: UploadFile = File(...),
 ):
     if not file.filename.endswith(".xlsx"):
@@ -387,7 +390,7 @@ async def upload_xlsx(
 
 @app.post("/upload-csv")
 async def upload_csv(
-    db_session: Annotated[Session, Depends(database.get_db_session)],
+    db_session: Annotated[Session, Depends(get_db_session)],
     file: UploadFile = File(...),
 ):
     if not file.filename.endswith(".csv"):

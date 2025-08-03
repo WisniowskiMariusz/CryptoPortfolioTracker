@@ -168,11 +168,3 @@ class Database:
             db_session.rollback()
             print(f"Database error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
-
-
-# Singleton instance for the whole app
-database = Database()
-
-
-def get_db():
-    return database
