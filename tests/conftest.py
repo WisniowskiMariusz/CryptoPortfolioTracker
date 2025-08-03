@@ -90,7 +90,7 @@ def mocked_db():
 
 
 @pytest.fixture
-def override_get_db(mocked_db, override_get_db_session):    
+def override_get_db(mocked_db, override_get_db_session):
     app.dependency_overrides[get_db] = lambda: mocked_db
     yield mocked_db
     app.dependency_overrides.pop(get_db, None)

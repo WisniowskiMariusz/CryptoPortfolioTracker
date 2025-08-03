@@ -12,6 +12,7 @@ from app import models, crud
 from app.binance_service import BinanceService
 from app.tools import datetime_from_str, timestamp_from_str
 from app.dependencies import get_binance_service, get_db_session, get_db
+from app.nbp_router import router as nbp_router
 
 load_dotenv()
 
@@ -21,6 +22,8 @@ app = FastAPI(
     description="API to track your crypto portfolio and transactions.",
     version="0.1.0",
 )
+
+app.include_router(nbp_router)
 
 
 @app.get("/health")
@@ -289,7 +292,7 @@ def fetch_and_store_all_deposits(
     db_session: Annotated[Session, Depends(get_db_session)],
     asset: str | None = None,
     earliest_date: str = "2017-07-01",
-    latest_date: str | None = None,    
+    latest_date: str | None = None,
 ):
     """
     Fetches all deposits from Binance (with pagination)
@@ -313,7 +316,7 @@ def fetch_and_store_all_withdrawals(
     db_session: Annotated[Session, Depends(get_db_session)],
     asset: str | None = None,
     earliest_date: str = "2017-07-01",
-    latest_date: str | None = None,    
+    latest_date: str | None = None,
 ):
     """
     Fetches all withdrawals from Binance (with pagination) and stores unique
