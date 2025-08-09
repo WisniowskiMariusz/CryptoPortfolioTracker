@@ -219,7 +219,7 @@ async def get_binance_trades(
         raise HTTPException(
             status_code=404, detail="No trades found for the specified symbol."
         )
-    stored_trades = database.store_trades(db=db_session, trades=trades)
+    stored_trades = database.store_trades(db_session=db_session, trades=trades)
     print(f"Stored {len(stored_trades)} trades for symbol {symbol}.")
     return {
         "Stored trades": len(stored_trades),
