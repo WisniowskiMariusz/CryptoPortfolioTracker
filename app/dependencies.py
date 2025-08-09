@@ -3,10 +3,16 @@ from fastapi import Depends
 from functools import lru_cache
 from app.binance_service import BinanceService
 from app.database import Database
+from app.nbp_service import NbpService
 
 
 def get_binance_service():
     return BinanceService()
+
+
+@lru_cache()
+def get_nbp_service():
+    return NbpService()
 
 
 @lru_cache()

@@ -9,7 +9,7 @@ from sqlalchemy import (
     DateTime,
     PrimaryKeyConstraint,
 )
-from sqlalchemy.dialects.mssql import SMALLDATETIME
+from sqlalchemy.dialects.mssql import SMALLDATETIME, DATE
 from sqlalchemy.inspection import inspect
 from app.base import Base
 
@@ -79,6 +79,17 @@ class PriceHistory(Base):
     time = Column(transaction_time_type, index=True)
     price = Column(Float)
     source = Column(String(20), default="binance")
+
+
+class DailyPriceHistory(Base):
+    __tablename__ = "daily_price_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    base_currency = Column(String(10), index=True)
+    quote_currency = Column(String(10), index=True)
+    date = Column(DATE, index=True)
+    price = Column(Float)
+    source = Column(String(20))
 
 
 class Deposit(Base):
