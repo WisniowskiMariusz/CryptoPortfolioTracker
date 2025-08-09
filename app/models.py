@@ -133,6 +133,15 @@ class Withdrawal(Base):
     tx_key = Column(String(128))
 
 
+class BinanceSymbols(Base):
+    __tablename__ = "binance_symbols"
+
+    symbol = Column(String(40), primary_key=True, index=True)
+    status = Column(String(20))
+    base_currency = Column(String(20))
+    quote_currency = Column(String(20))
+
+
 def create_model_instance_from_dict(
     model_class, data: dict, key_map: dict | None = None
 ):
