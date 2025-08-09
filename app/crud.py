@@ -59,3 +59,50 @@ def create_rate(db_session: Session, rate: dict):
     db_session.commit()
     db_session.refresh(db_rate)
     return db_rate
+
+
+def binance_symbol_exists(db_session: Session, symbol: str) -> bool:
+    return (
+        db_session.query(models.BinanceSymbols)
+        .filter(models.BinanceSymbols.symbol == symbol)
+        .first()
+        is not None
+    )
+
+
+def create_binance_symbol(db_session: Session, symbol_data: dict):
+    db_symbol = models.BinanceSymbols(
+        symbol=symbol_data["symbol"],
+        status=symbol_data["status"],
+        base_currency=symbol_data["baseAsset"],
+        quote_currency=symbol_data["quoteAsset"],
+    )
+    db_session.add(db_symbol)
+    db_session.commit()
+    db_session.refresh(db_symbol)
+    return db_symbol
+
+
+def upsert_binance_symbols(db_session: Session, symbols_data: list[dict]) -> dict:
+    """Store the rates in the database."""
+    saved_count = 0
+    updated_count = 0
+    print(f"Storing {len(symbols_data)} Binance symbols in the database...")
+    for symbol_data in symbols_data:
+        if not binance_symbol_exists(db_session, symbol_data["symbol"]):
+            create_binance_symbol(db_session, symbol_data)
+            saved_count += 1
+        else:
+            existing_symbol = (
+                db_session.query(models.BinanceSymbols)
+                .filter(models.BinanceSymbols.symbol == symbol_data["symbol"])
+                .first()
+            )
+            for key, value in symbol_data.items():
+                setattr(existing_symbol, key, value)
+            db_session.commit()
+            updated_count += 1
+    return {
+        "saved_symbols": saved_count,
+        "updated_symbols": updated_count,
+    }

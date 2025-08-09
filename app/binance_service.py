@@ -397,3 +397,17 @@ class BinanceService:
         if asset:
             params["asset"] = asset
         return self.client.get_flexible_product_position(**params)
+
+    def get_exchange_info(self) -> dict:
+        """
+        Fetches exchange information from Binance.
+        This includes trading pairs, limits, and other exchange details.
+        """
+        return self.client.exchange_info()
+
+    def get_symbols(self) -> list[dict]:
+        """
+        Fetches exchange information from Binance.
+        This includes trading pairs, limits, and other exchange details.
+        """
+        return self.client.exchange_info()["symbols"]

@@ -13,6 +13,7 @@ from app.binance_service import BinanceService
 from app.tools import datetime_from_str, timestamp_from_str
 from app.dependencies import get_binance_service, get_db_session, get_db
 from app.nbp_router import router as nbp_router
+from app.binance_router import router as binance_router
 
 load_dotenv()
 
@@ -24,6 +25,7 @@ app = FastAPI(
 )
 
 app.include_router(nbp_router)
+app.include_router(binance_router)
 
 
 @app.get("/health")
