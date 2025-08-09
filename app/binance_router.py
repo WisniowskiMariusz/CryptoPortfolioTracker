@@ -44,12 +44,12 @@ def update_symbols(
     db_session: Annotated[Session, Depends(get_db_session)],
 ) -> dict:
     """Update Binance symbols in the database."""
-    symbols_data: list[dict] = binance_service.get_symbols()    
+    symbols_data: list[dict] = binance_service.get_symbols()
     if not symbols_data:
         raise HTTPException(
             status_code=404, detail="No symbols found in Binance API response."
         )
-    try:        
+    try:
         return crud.upsert_binance_symbols(
             db_session=db_session, symbols_data=symbols_data
         )
