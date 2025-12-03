@@ -500,7 +500,7 @@ class KangaService:
                         # print(trades_for_date[0]["original_id"])
                         print(f"Found {len(trades_for_date)} trades for date: {date}.")
                         trades.extend(trades_for_date)
-                        continue                        
+                        continue
                 print(f"Found {len(trades_for_date)} trades for date: {date}.")
                 trades.extend(trades_for_date)
                 # if trades_for_date[0]["fee_currency"] == "Not applicable":
@@ -562,10 +562,7 @@ class KangaService:
         return pair
 
     def parse_trades_from_csv(
-        self,
-        csv_file: bytes,
-        timezone: str,
-        user: str
+        self, csv_file: bytes, timezone: str, user: str
     ) -> list[dict]:
         """Imports trades from a Kanga CSV file into the database."""
         try:

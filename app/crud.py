@@ -331,7 +331,7 @@ def upsert_trade_records(
 
     # print(f"trades_data[0]: {trades_data[0]}")
     for trade in trades_data:
-        if "id" not in trade or "original_id" not in trade:            
+        if "id" not in trade or "original_id" not in trade:
             print(trade)
             if "message" in trade:
                 return {"message": trade["message"]}
@@ -375,12 +375,12 @@ def upsert_trade_records(
 
     print(f"Found {len(existing_keys)} existing trade records in the database.")
     print(
-        f"""Found {len(existing_ids_empty_original)} existing trade IDs 
-        with empty original_id."""
+        f"Found {len(existing_ids_empty_original)} existing trade IDs "
+        "with empty original_id."
     )
     print(
-        f"""Found {len(existing_ids_not_empty_original)} existing trade IDs
-        with non-empty original_id."""
+        f"Found {len(existing_ids_not_empty_original)} existing trade IDs "
+        "with non-empty original_id."
     )
     # Prepare mappings for insertion (skip existing)
     to_insert = []

@@ -74,7 +74,7 @@ def generate_hash(input_dict: dict[str, str]) -> str:
 
 
 def string(x: Decimal) -> str:
-    """Convert Decimal to a clean string 
+    """Convert Decimal to a clean string
     without trailing zeros or scientific notation."""
     if x.is_zero():
         return "0"

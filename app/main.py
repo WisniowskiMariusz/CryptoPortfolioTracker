@@ -296,7 +296,7 @@ async def fetch_and_store_trades_for_all_symbols(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
     results = []
-    for symbol in symbols:        
+    for symbol in symbols:
         data = binance_service.fetch_all_trades_for_symbol(
             symbol=symbol,
             start_time=timestamp_from_str(start_time),
