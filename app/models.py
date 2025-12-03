@@ -2,14 +2,15 @@ import os
 from sqlalchemy import (
     Column,
     Integer,
+    SmallInteger,
     BigInteger,
-    VARCHAR,
     String,
     Float,
+    DECIMAL,
     DateTime,
     PrimaryKeyConstraint,
 )
-from sqlalchemy.dialects.mssql import SMALLDATETIME, DATE
+from sqlalchemy.dialects.mssql import SMALLDATETIME, DATE, DATETIME2
 from sqlalchemy.inspection import inspect
 from app.base import Base
 
@@ -18,17 +19,23 @@ transaction_time_type = (
     SMALLDATETIME if os.getenv("USE_SQL_SERVER", "true").lower() == "true" else DateTime
 )
 
+time_type_up_to_seconds = (
+    DATETIME2(precision=0)
+    if os.getenv("USE_SQL_SERVER", "true").lower() == "true"
+    else DateTime()
+)
+
 
 class TradedSymbols(Base):
     __tablename__ = "traded_symbols"
-    symbol = Column(VARCHAR(20), primary_key=True, unique=True, index=True)
+    symbol = Column(String(20), primary_key=True, unique=True, index=True)
 
 
 class TradesFromApi(Base):
     __tablename__ = "trades_from_api"
 
     id = Column(BigInteger, name="id", index=True)
-    symbol = Column(VARCHAR(20), name="symbol", index=True)
+    symbol = Column(String(20), name="symbol", index=True)
     price = Column(Float, name="price")
     qty = Column(Float, name="qty")
     quote_qty = Column(Float, name="quoteQty")
@@ -140,6 +147,47 @@ class BinanceSymbols(Base):
     status = Column(String(20))
     base_currency = Column(String(20))
     quote_currency = Column(String(20))
+
+
+class Tickers(Base):
+    __tablename__ = "tickers"
+
+    ticker = Column(String(40), primary_key=True)
+    venue = Column(String(20))
+    base_asset = Column(String(20))
+    quote_asset = Column(String(20))
+
+
+class Users(Base):
+    __tablename__ = "users"
+    id = Column(SmallInteger, primary_key=True)
+    name = Column(String(20), nullable=False)
+
+
+class Exchanges(Base):
+    __tablename__ = "exchanges"
+    id = Column(SmallInteger, primary_key=True)
+    name = Column(String(20), nullable=False)
+
+
+class Trades(Base):
+    __tablename__ = "trades"
+
+    utc_time = Column(time_type_up_to_seconds, primary_key=True, nullable=False)
+    bought_currency = Column(String(16))
+    sold_currency = Column(String(16))
+    price = Column(DECIMAL(16, 9))
+    bought_amount = Column(DECIMAL(28, 18))
+    sold_amount = Column(DECIMAL(28, 18))
+    fee_amount = Column(DECIMAL(28, 18))
+    fee_currency = Column(String(16))
+    original_id = Column(String(64), primary_key=True, autoincrement=False)
+    id = Column(String(64), primary_key=True, autoincrement=False)
+    exchange_id = Column(SmallInteger)
+    user_id = Column(SmallInteger)
+
+    def to_dict(self) -> dict:
+        return {c.key: getattr(self, c.key) for c in inspect(self).mapper.column_attrs}
 
 
 def create_model_instance_from_dict(
