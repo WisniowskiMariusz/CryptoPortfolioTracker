@@ -195,7 +195,7 @@ def test_fetch_and_store_trades_success(
     override_get_db.store_trades.return_value = [object()]
     with patch.object(
         fake_binance_service,
-        "fetch_trades",
+        "fetch_all_trades_for_symbol",
         return_value=[{"id": 1, "symbol": "BTCUSDT"}],
     ):
         response = test_client.post("/fetch_and_store_trades")
@@ -205,7 +205,9 @@ def test_fetch_and_store_trades_success(
 
 
 def test_fetch_and_store_trades_no_trades(test_client, fake_binance_service):
-    with patch.object(fake_binance_service, "fetch_trades", return_value=[]):
+    with patch.object(
+        fake_binance_service, "fetch_all_trades_for_symbol", return_value=[]
+    ):
         response = test_client.post("/fetch_and_store_trades")
     assert response.status_code == 404
     assert "No trades found" in response.json()["detail"]
@@ -213,7 +215,9 @@ def test_fetch_and_store_trades_no_trades(test_client, fake_binance_service):
 
 def test_fetch_and_store_trades_exception(test_client, fake_binance_service):
     with patch.object(
-        fake_binance_service, "fetch_trades", side_effect=Exception("fail")
+        fake_binance_service,
+        "fetch_all_trades_for_symbol",
+        side_effect=Exception("fail"),
     ):
         response = test_client.post("/fetch_and_store_trades")
     assert response.status_code == 500

@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 import pytest
 from binance.error import ClientError
 from unittest.mock import patch, MagicMock
@@ -214,7 +215,7 @@ def test_fetch_trades_returns_trades(mocked_binance_service_tuple):
         }
     ] * 1
     mock_client.my_trades.side_effect = [batch1, batch2, []]
-    trades = fake_binance_service.fetch_trades("BTCUSDT", limit=2)
+    trades = fake_binance_service.fetch_all_trades_for_symbol("BTCUSDT", limit=2)
     print(f"Fetched trades: {trades}")
     assert len(trades) == 3
     assert trades[0]["price"] == 100.0
@@ -224,7 +225,7 @@ def test_fetch_trades_returns_trades(mocked_binance_service_tuple):
 def test_fetch_trades_returns_empty(mocked_binance_service_tuple):
     fake_binance_service, mock_client = mocked_binance_service_tuple
     mock_client.my_trades.return_value = []
-    trades = fake_binance_service.fetch_trades("BTCUSDT")
+    trades = fake_binance_service.fetch_all_trades_for_symbol("BTCUSDT")
     assert trades == []
 
 
@@ -247,7 +248,9 @@ def test_fetch_trades_with_start_and_end_time(mocked_binance_service_tuple):
         }
     ]
     mock_client.my_trades.side_effect = [batch, []]
-    trades = fake_binance_service.fetch_trades("BTCUSDT", start_time=123, end_time=456)
+    trades = fake_binance_service.fetch_all_trades_for_symbol(
+        "BTCUSDT", start_time=123, end_time=456
+    )
     assert len(trades) == 1
     assert trades[0]["symbol"] == "BTCUSDT"
 
@@ -271,7 +274,7 @@ def test_fetch_trades_handles_non_bool_flags(mocked_binance_service_tuple):
         }
     ]
     mock_client.my_trades.side_effect = [batch, []]
-    trades = fake_binance_service.fetch_trades("BTCUSDT")
+    trades = fake_binance_service.fetch_all_trades_for_symbol("BTCUSDT")
     assert trades[0]["isBuyer"] == 1
     assert trades[0]["isMaker"] == 0
     assert trades[0]["isBestMatch"] == 1
@@ -296,7 +299,7 @@ def test_fetch_trades_with_partial_batch(mocked_binance_service_tuple):
         }
     ]
     mock_client.my_trades.side_effect = [batch, []]
-    trades = fake_binance_service.fetch_trades("BTCUSDT")
+    trades = fake_binance_service.fetch_all_trades_for_symbol("BTCUSDT")
     assert len(trades) == 1
 
 
@@ -335,7 +338,7 @@ def test_fetch_trades_with_multiple_batches(mocked_binance_service_tuple):
         }
     ] * 500
     mock_client.my_trades.side_effect = [batch1, batch2, []]
-    trades = fake_binance_service.fetch_trades("BTCUSDT")
+    trades = fake_binance_service.fetch_all_trades_for_symbol("BTCUSDT")
     assert len(trades) == 1500
     assert trades[0]["price"] == 100.0
     assert trades[1000]["price"] == 200.0
@@ -346,8 +349,8 @@ def test_fetch_trades_binance_api_exception(mocked_binance_service_tuple):
     mock_response = MagicMock()
     mock_response.text = "error"
     mock_client.my_trades.side_effect = ClientError(mock_response, 400, "error", {})
-    with pytest.raises(ClientError):
-        fake_binance_service.fetch_trades("BTCUSDT")
+    with pytest.raises(HTTPException):
+        fake_binance_service.fetch_all_trades_for_symbol("BTCUSDT")
 
 
 def test_fetch_prices_calls_dependencies_correctly(fake_binance_service):
