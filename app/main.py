@@ -5,6 +5,7 @@ from typing import Annotated
 from dotenv import load_dotenv
 from io import BytesIO, StringIO
 from fastapi import FastAPI, Depends, Query, HTTPException, UploadFile, File
+from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from app.database import Database
@@ -14,6 +15,8 @@ from app.tools import datetime_from_str, timestamp_from_str
 from app.dependencies import get_binance_service, get_db_session, get_db
 from app.nbp_router import router as nbp_router
 from app.binance_router import router as binance_router
+from app.kanga_router import router as kanga_router
+from app.users_router import router as users_router
 
 load_dotenv()
 
@@ -26,11 +29,34 @@ app = FastAPI(
 
 app.include_router(nbp_router)
 app.include_router(binance_router)
+app.include_router(kanga_router)
+app.include_router(users_router)
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/routes", tags=["Utility"], summary="List all API routes")
+def show_routes() -> list[dict]:
+    """
+    Show all routes in the application."""
+    response: list = []
+    try:
+        for route in app.routes:
+            if isinstance(route, APIRoute):
+                response.append(
+                    {
+                        "path": route.path,
+                        "name": route.name,
+                        "methods": list(route.methods),
+                        "operation_id": route.operation_id,
+                    }
+                )
+        return response
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.get("/get_account")
@@ -213,7 +239,7 @@ async def get_binance_trades(
     start_ts = timestamp_from_str(start_time)
     end_ts = timestamp_from_str(end_time)
     try:
-        trades = binance_service.fetch_trades(symbol, start_ts, end_ts)
+        trades = binance_service.fetch_all_trades_for_symbol(symbol, start_ts, end_ts)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     print(f"Fetched {len(trades)} trades for symbol {symbol}.")
@@ -270,8 +296,8 @@ async def fetch_and_store_trades_for_all_symbols(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
     results = []
-    for symbol in symbols:
-        data = binance_service.fetch_trades(
+    for symbol in symbols:        
+        data = binance_service.fetch_all_trades_for_symbol(
             symbol=symbol,
             start_time=timestamp_from_str(start_time),
             end_time=timestamp_from_str(end_time),
