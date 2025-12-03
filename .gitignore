@@ -202,4 +202,4 @@ crypto_tracker.db
 .vscode/
 
 # Data files
-data_xlsx
+data/

@@ -2,6 +2,7 @@ import keyring.errors
 import requests
 import time
 import keyring
+import pandas as pd
 from datetime import datetime, timedelta, timezone
 from requests.exceptions import (
     RequestException,
@@ -12,12 +13,15 @@ from requests.exceptions import (
 from typing import List, Dict, Generator
 from binance.spot import Spot
 from binance.error import ClientError
-from app import tools
+from app import tools, crud
+from fastapi import HTTPException
+from io import StringIO
 
 
 BINANCE_API_URL = "https://api.binance.com/api/v3/"
 RETRY_ATTEMPTS = 5
 KEYRING_SYSTEM_NAME = "binance_CherryWallet_api"
+# {MARCELINA: "binance_CherryWallet_api", "MARIUSZ:": "binance_Mariusz_ro_api"}
 
 
 class BinanceService:
@@ -25,9 +29,9 @@ class BinanceService:
 
     def __init__(self, keyring_system_name=KEYRING_SYSTEM_NAME):
         self.keyring_system_name = keyring_system_name
-        api_key: str = self._get_api_key()
-        api_secret: str = self._get_api_secret()
-        self.client: Spot = self._get_client(api_key, api_secret)
+        self.client: Spot = self._get_client(
+            self._get_api_key(), self._get_api_secret()
+        )
 
     def _get_api_key(self) -> str:
         """
@@ -163,53 +167,82 @@ class BinanceService:
             requests_made += 1
             time.sleep(0.5)
 
-    def fetch_trades(self, symbol, start_time=None, end_time=None, limit=1000) -> list:
+    def fetch_all_trades_for_symbol(
+        self, symbol, start_time=None, end_time=None, limit=1000
+    ) -> list:
+        trades = []
+        from_id = None
+        while True:
+            batch = self.fetch_trades_for_symbol_single_req(
+                symbol=symbol,
+                from_id=from_id,
+                start_time=start_time,
+                end_time=end_time,
+                limit=limit,
+            )
+            if not batch:
+                break
+            trades.extend(batch)
+            if len(batch) < limit:
+                break
+            from_id = batch[-1]["id"] + 1
+            time.sleep(0.5)  # to respect rate limits
+        print(f"Fetched {len(trades)} trades for symbol {symbol}.")
+        if not trades:
+            print(f"No trades found for symbol {symbol}.")
+            return []
+        return trades
+
+    def fetch_trades_for_symbol_single_req(
+        self, symbol, from_id=None, start_time=None, end_time=None, limit=1000
+    ) -> list:
         try:
             trades = []
-            from_id = None
-            while True:
-                params = {"symbol": symbol, "limit": limit}
-                if from_id:
-                    params["fromId"] = from_id
-                if start_time:
-                    params["startTime"] = start_time
-                if end_time:
-                    params["endTime"] = end_time
-                batch = self.client.my_trades(**params)
-                if not batch:
-                    break
-                for trade in batch:
-                    trades.append(
-                        {
-                            "id": trade.get("id"),
-                            "symbol": trade.get("symbol"),
-                            "orderId": trade.get("orderId"),
-                            "price": float(trade.get("price")),
-                            "qty": float(
-                                trade.get("qty"),
-                            ),
-                            "quoteQty": float(trade.get("quoteQty")),
-                            "commission": float(trade.get("commission")),
-                            "commissionAsset": trade.get("commissionAsset"),
-                            "time": datetime.fromtimestamp(
-                                trade["time"] / 1000.0, tz=timezone.utc
-                            ).replace(tzinfo=None),
-                            "isBuyer": int(trade.get("isBuyer", False)),
-                            "isMaker": int(trade.get("isMaker", False)),
-                            "isBestMatch": int(trade.get("isBestMatch", False)),
-                        }
-                    )
-                if len(batch) < limit:
-                    break
-                from_id = batch[-1]["id"] + 1
-            print(f"Fetched {len(trades)} trades for symbol {symbol}.")
-            if not trades:
-                print(f"No trades found for symbol {symbol}.")
-                return []
+            params = {"symbol": symbol, "limit": limit}
+            if from_id:
+                params["fromId"] = from_id
+            if start_time:
+                params["startTime"] = start_time
+            if end_time:
+                params["endTime"] = end_time
+            trades_raw = self.client.my_trades(**params)
+            print(f"raw trades: {trades_raw}")
+            for trade in trades_raw:
+                trades.append(
+                    {
+                        "id": trade.get("id"),
+                        "symbol": trade.get("symbol"),
+                        "orderId": trade.get("orderId"),
+                        "price": float(trade.get("price")),
+                        "qty": float(trade.get("qty")),
+                        "quoteQty": float(trade.get("quoteQty")),
+                        "commission": float(trade.get("commission")),
+                        "commissionAsset": trade.get("commissionAsset"),
+                        "time": datetime.fromtimestamp(
+                            trade["time"] / 1000.0, tz=timezone.utc
+                        ).replace(tzinfo=None),
+                        "isBuyer": int(trade.get("isBuyer", False)),
+                        "isMaker": int(trade.get("isMaker", False)),
+                        "isBestMatch": int(trade.get("isBestMatch", False)),
+                    }
+                )
             return trades
         except ClientError as e:
-            print(f"Binance API error: {str(e)}")
-            raise e
+            status_code = getattr(e, "status_code", None)
+            if not status_code and getattr(e, "response", None) is not None:
+                status_code = getattr(e.response, "status_code", None)
+            if not status_code:
+                status_code = 502  # Bad gateway / upstream error
+
+            # prefer plain response body if available
+            try:
+                detail = e.response.text if getattr(e, "response", None) else str(e)
+            except Exception:
+                detail = str(e)
+
+            # optional: special-case known Binance errors to return 400/429 etc.
+            # e.g. if status_code == 400 and "-1127" in detail: use 400
+            raise HTTPException(status_code=int(status_code), detail=detail)
 
     def get_deposit_history(
         self, asset: str = None, start_time: int = None, end_time: int = None
@@ -411,3 +444,113 @@ class BinanceService:
         This includes trading pairs, limits, and other exchange details.
         """
         return self.client.exchange_info()["symbols"]
+
+    def get_base_currency(self, symbol_dict: dict) -> str | None:
+        """
+        Fetches the base currency for a given trading symbol from Binance.
+        """
+        return symbol_dict.get("base_currency")
+
+    def get_quote_currency(self, symbol_dict: dict) -> str | None:
+        """
+        Fetches the quote currency for a given trading symbol from Binance.
+        """
+        return symbol_dict.get("quote_currency")
+
+    def parse_trades_from_csv(self, file_content: bytes) -> list:
+        """Imports trades from a Binance CSV file into the database."""
+
+        try:
+            df = pd.read_csv(StringIO(file_content.decode("utf-8")))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error reading CSV file: {e}")
+        required_columns = {
+            "Date(UTC)",
+            "Pair",
+            "Side",
+            "Price",
+            "Executed",
+            "Amount",
+            "Fee",
+        }
+        if not required_columns.issubset(df.columns):
+            missing = required_columns - set(df.columns)
+            raise HTTPException(
+                status_code=400, detail=f"Missing required columns: {missing}"
+            )
+        records = []
+        for _, row in df.iterrows():
+            try:
+                trade = {
+                    "date_utc": str(row["Date(UTC)"]),
+                    "pair": str(row["Pair"]),
+                    "side": str(row["Side"]),
+                    "price": float(row["Price"]),
+                    "executed": str(row["Executed"]),
+                    "amount": str(row["Amount"]),
+                    "fee": str(row["Fee"]),
+                }
+                records.append(trade)
+                print(f"Trade hash: {tools.generate_hash(str(trade))}")
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error parsing row: {e}")
+        return records
+
+    def parse_trades_from_csv_2(
+        self,
+        csv_file: bytes,
+    ) -> list[dict]:
+        """Imports trades from a Binance CSV file into the database."""
+        try:
+            df = pd.read_csv(StringIO(csv_file.decode("utf-8")))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error reading CSV file: {e}")
+        required_columns = {
+            "Data(UTC)",
+            "Pair",
+            "Side",
+            "Price",
+            "Executed",
+            "Amount",
+            "Fee",
+        }
+        if not required_columns.issubset(df.columns):
+            missing = required_columns - set(df.columns)
+            raise HTTPException(
+                status_code=400, detail=f"Missing required columns: {missing}"
+            )
+
+        trades_data = []
+        for _, row in df.iterrows():
+            try:
+                base_amount = self.get_base_currency(crud.get_binance_symbol_dict())
+                quote_amount = float(str(row["Suma"]).split(" ")[0])
+                fee, fee_currency = row["Opłata"].split(" ")
+                base_currency, quote_currency = row["Para"].split("/")
+                if row["Strona"] == "Kupujący":
+                    bought_currency = base_currency
+                    sold_currency = quote_currency
+                    bought_amount = base_amount
+                    sold_amount = -1 * quote_amount
+                if row["Strona"] == "Sprzedający":
+                    bought_currency = quote_currency
+                    sold_currency = base_currency
+                    bought_amount = quote_amount
+                    sold_amount = -1 * base_amount
+                trade_data = {
+                    "time": pd.to_datetime(row["Data"]),
+                    "bought_currency": bought_currency,
+                    "sold_currency": sold_currency,
+                    "price": float(str(row["Cena"]).split(" ")[0]),
+                    "bought_amount": bought_amount,
+                    "sold_amount": sold_amount,
+                    "fee_currency": fee_currency,
+                    "fee_amount": float(fee),
+                    "id": f"Kanga-CSV-{row.name}-{int(time())}",
+                }
+                trades_data.append(trade_data)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error parsing row: {e}")
+        print(f"First 5: {trades_data[:5]}")
+        print(f"Last 5: {trades_data[-5:]}")
+        return trades_data

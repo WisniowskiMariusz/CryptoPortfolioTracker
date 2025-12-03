@@ -1,5 +1,7 @@
+from decimal import Decimal
+import hashlib
+import json
 from datetime import datetime, timezone, timedelta
-
 from fastapi import HTTPException
 
 
@@ -61,3 +63,22 @@ def add_n_days_to_date(
     by a specified number of days. Default is now.
     """
     return date + timedelta(days=days)
+
+
+def generate_hash(input_dict: dict[str, str]) -> str:
+    """Generate a deterministic SHA-256 hash of the input dictionary."""
+    sha256_hash = hashlib.sha256()
+    serialized = json.dumps(input_dict, sort_keys=True, separators=(",", ":"))
+    sha256_hash.update(serialized.encode("utf-8"))
+    return sha256_hash.hexdigest()
+
+
+def string(x: Decimal) -> str:
+    """Convert Decimal to a clean string
+    without trailing zeros or scientific notation."""
+    if x.is_zero():
+        return "0"
+    s = format(x.normalize(), "f")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s

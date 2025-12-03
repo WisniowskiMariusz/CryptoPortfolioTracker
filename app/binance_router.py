@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, File, HTTPException, Depends, Query, UploadFile
 from typing import Annotated
 from sqlalchemy.orm import Session
 from app.binance_service import BinanceService
@@ -9,8 +9,8 @@ from app import crud
 router = APIRouter(prefix="/binance", tags=["Binance"])
 
 
-@router.get("/exchange_info")
-def get_exchange_info(
+@router.get("/get_binance_exchange_info")
+def get_binance_exchange_info(
     binance_service: Annotated[BinanceService, Depends(get_binance_service)],
 ) -> dict:
     """
@@ -59,3 +59,40 @@ def update_symbols(
             status_code=500,
             detail=f"Error storing Binance symbols: {str(e)}",
         )
+
+
+@router.post("/get_currencies")
+def get_currencies(
+    db_session: Annotated[Session, Depends(get_db_session)],
+    symbol: str = Query(default="USTBTC", description="Symbol to filter currencies"),
+) -> dict:
+    """Get Binance currencies from the database."""
+    try:
+        return crud.get_binance_symbol_dict(db_session=db_session, symbol=symbol)
+    except Exception as e:
+        print(f"Error storing Binance symbols: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error storing Binance symbols: {str(e)}",
+        )
+
+
+@router.post("/upload-csv")
+async def upload_csv(
+    binance_service: Annotated[BinanceService, Depends(get_binance_service)],
+    file: UploadFile = File(...),
+):
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are supported.")
+    try:
+        contents: bytes = await file.read()
+        trades: list[list[str]] = binance_service.parse_trades_from_csv(
+            file_content=contents
+        )
+        for trade in trades:
+            print(str(trade))
+        return {
+            "trades": len(binance_service.parse_trades_from_csv(file_content=contents))
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error reading CSV file: {e}")
