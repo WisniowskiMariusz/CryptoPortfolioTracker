@@ -25,11 +25,11 @@ KANGA_API_URL = "https://api.kanga.exchange"
 KEYRING_SYSTEM_NAME = "kanga_marcelina_api_wallet_and_history"
 # in {
 # "kanga_wallet_api",
-# "kanga_trading_api", (Mariusz)
+# "kanga_trading_api", (MARIUSZ)
 # "kanga_history_api",
-# "kanga_marcelina_trading"
-# "kanga_mariusz_api_portfel_and_history"
-# "kanga_marcelina_api_wallet_and_history"
+# "kanga_marcelina_trading" (MARCELINA)
+# "kanga_mariusz_api_portfel_and_history" (MARIUSZ)
+# "kanga_marcelina_api_wallet_and_history" (MARCELINA)
 # }
 PAUSE_SECONDS = 1.0
 MAX_RETRIES = 3
@@ -55,8 +55,6 @@ class KangaService:
         self.api_key: str = self._get_api_key()
         self.api_secret: str = self._get_api_secret()
         self.user: str = self._get_user()
-        if not self.user:
-            raise Exception("Username not found in keyring.")
         # rate limiting / retry configuration
         self.pause_seconds = float(pause_seconds)
         self.max_retries = int(max_retries)
