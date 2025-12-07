@@ -1,3 +1,4 @@
+from decimal import Decimal
 import keyring.errors
 import requests
 import time
@@ -21,14 +22,34 @@ from io import StringIO
 BINANCE_API_URL = "https://api.binance.com/api/v3/"
 RETRY_ATTEMPTS = 5
 KEYRING_SYSTEM_NAME = "binance_CherryWallet_api"
-# {MARCELINA: "binance_CherryWallet_api", "MARIUSZ:": "binance_Mariusz_ro_api"}
+# in {
+# "binance_CherryWallet_api" (MARCELINA)
+# "binance_Mariusz_ro_api" (MARIUSZ)
+# }
+PAUSE_SECONDS = 1.0
+MAX_RETRIES = 3
+BACKOFF_FACTOR = 1.0
 
 
 class BinanceService:
     keyring_system_name: str
+    api_url: str
+    api_key: str
+    api_secret: str
+    user: str
 
-    def __init__(self, keyring_system_name=KEYRING_SYSTEM_NAME):
-        self.keyring_system_name = keyring_system_name
+    def __init__(
+        self,
+        keyring_system_name=KEYRING_SYSTEM_NAME,
+        pause_seconds: float = PAUSE_SECONDS,
+        max_retries: int = MAX_RETRIES,
+        backoff_factor: float = BACKOFF_FACTOR,
+    ):
+        self.keyring_system_name: str = keyring_system_name
+        self.api_url = BINANCE_API_URL
+        self.api_key: str = self._get_api_key()
+        self.api_secret: str = self._get_api_secret()
+        self.user: str = self._get_user()
         self.client: Spot = self._get_client(
             self._get_api_key(), self._get_api_secret()
         )
@@ -50,6 +71,15 @@ class BinanceService:
             return keyring.get_password(self.keyring_system_name, "api_secret")
         except keyring.errors.KeyringError:
             raise Exception("Binance API secret not found in keyring.")
+
+    def _get_user(self) -> str | None:
+        """
+        Fetches username from keyring.
+        """
+        try:
+            return keyring.get_password(self.keyring_system_name, "user")
+        except keyring.errors.KeyringError:
+            raise Exception("Username not found in keyring.")
 
     def _get_client(self, api_key: str, api_secret: str) -> Spot:
         return Spot(api_key=api_key, api_secret=api_secret)
@@ -497,8 +527,7 @@ class BinanceService:
         return records
 
     def parse_trades_from_csv_2(
-        self,
-        csv_file: bytes,
+        self, db_session: crud.Session, csv_file: bytes, user: str
     ) -> list[dict]:
         """Imports trades from a Binance CSV file into the database."""
         try:
@@ -506,7 +535,7 @@ class BinanceService:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error reading CSV file: {e}")
         required_columns = {
-            "Data(UTC)",
+            "Date(UTC)",
             "Pair",
             "Side",
             "Price",
@@ -519,36 +548,60 @@ class BinanceService:
             raise HTTPException(
                 status_code=400, detail=f"Missing required columns: {missing}"
             )
-
+        df = df.rename(columns={"Date(UTC)": "Date_UTC"})
         trades_data = []
-        for _, row in df.iterrows():
+        for row_number, row in enumerate(df.itertuples(), start=1):
+            print(row)
             try:
-                base_amount = self.get_base_currency(crud.get_binance_symbol_dict())
-                quote_amount = float(str(row["Suma"]).split(" ")[0])
-                fee, fee_currency = row["Opłata"].split(" ")
-                base_currency, quote_currency = row["Para"].split("/")
-                if row["Strona"] == "Kupujący":
+                symbol_dict: dict = crud.get_binance_symbol_dict(
+                    db_session=db_session, symbol=row.Pair
+                )
+                base_currency: str = self.get_base_currency(symbol_dict=symbol_dict)
+                quote_currency: str = self.get_quote_currency(symbol_dict=symbol_dict)
+                quote_amount = Decimal(str(row.Amount).replace(quote_currency, ""))
+                base_amount = Decimal(str(row.Executed).replace(base_currency, ""))
+                fee, fee_currency = tools.split_amount_currency(
+                    amount_currency_string=row.Fee
+                )
+                if row.Side == "BUY":
                     bought_currency = base_currency
                     sold_currency = quote_currency
                     bought_amount = base_amount
-                    sold_amount = -1 * quote_amount
-                if row["Strona"] == "Sprzedający":
+                    sold_amount = quote_amount
+                if row.Side == "SELL":
                     bought_currency = quote_currency
                     sold_currency = base_currency
                     bought_amount = quote_amount
-                    sold_amount = -1 * base_amount
-                trade_data = {
-                    "time": pd.to_datetime(row["Data"]),
-                    "bought_currency": bought_currency,
-                    "sold_currency": sold_currency,
-                    "price": float(str(row["Cena"]).split(" ")[0]),
-                    "bought_amount": bought_amount,
-                    "sold_amount": sold_amount,
-                    "fee_currency": fee_currency,
-                    "fee_amount": float(fee),
-                    "id": f"Kanga-CSV-{row.name}-{int(time())}",
+                    sold_amount = base_amount
+                trade_time_utc: datetime = pd.to_datetime(row.Date_UTC)
+                trade_str = {
+                    "utc_time": trade_time_utc.strftime("%Y-%m-%d %H:%M:%S"),
+                    "bought_currency": str(bought_currency),
+                    "sold_currency": str(sold_currency),
+                    "price": str(row.Price),
+                    "bought_amount": tools.string(bought_amount),
+                    "sold_amount": tools.string(sold_amount),
+                    "fee_currency": str(fee_currency),
+                    "fee_amount": str(fee),
+                    "original_id": "",
+                    "id": "",
+                    "exchange": "Binance",
+                    "user": user,
                 }
-                trades_data.append(trade_data)
+                print(f"Trade source for hash generation: {trade_str}")
+                trade_hash = tools.generate_hash(input_dict=trade_str)
+                parsed_trade: dict = trade_str | {
+                    "utc_time": trade_time_utc
+                    + pd.Timedelta(milliseconds=row_number % 1000),
+                    "price": Decimal(trade_str["price"]),
+                    "bought_amount": Decimal(trade_str["bought_amount"]),
+                    "sold_amount": Decimal(trade_str["sold_amount"]),
+                    "fee_amount": Decimal(trade_str["fee_amount"]),
+                    "id": trade_hash,
+                }
+                del parsed_trade["exchange"]
+                del parsed_trade["user"]
+                trades_data.append(parsed_trade)
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Error parsing row: {e}")
         print(f"First 5: {trades_data[:5]}")
