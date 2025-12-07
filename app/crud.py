@@ -413,9 +413,12 @@ def upsert_trade_records(
             continue
         to_insert.append(trade)
     try:
+        if duplicate:
+            print(f"Found {len(duplicate)} duplicate trades.")
+            print(f"Duplicate trades: {duplicate}")
         if to_insert:
             print(f"Inserting {len(to_insert)} new trades...")
-            print(f"Trades to insert: {to_insert}")
+            # print(f"Trades to insert: {to_insert}")
             db_session.bulk_insert_mappings(models.Trades, to_insert)
         if to_update:
             print(f"Updating {len(to_update)} existing trades...")
