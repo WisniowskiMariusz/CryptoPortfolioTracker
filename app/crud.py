@@ -415,14 +415,14 @@ def upsert_trade_records(
     try:
         if duplicate:
             print(f"Found {len(duplicate)} duplicate trades.")
-            print(f"Duplicate trades: {duplicate}")
+            # print(f"Duplicate trades: {duplicate}")
         if to_insert:
             print(f"Inserting {len(to_insert)} new trades...")
             # print(f"Trades to insert: {to_insert}")
             db_session.bulk_insert_mappings(models.Trades, to_insert)
         if to_update:
             print(f"Updating {len(to_update)} existing trades...")
-            print(f"Trades to update: {to_update}")
+            # print(f"Trades to update: {to_update}")
             for trade in to_update:
                 row = (
                     db_session.query(models.Trades)
