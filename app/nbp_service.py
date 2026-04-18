@@ -2,7 +2,6 @@ import requests
 from typing import Dict
 from app import crud
 
-
 NBP_API_URL = "https://api.nbp.pl/api/"
 
 

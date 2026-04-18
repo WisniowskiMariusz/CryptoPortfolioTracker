@@ -4,7 +4,6 @@ from app.dependencies import get_db_session
 from sqlalchemy.orm import Session
 from app import crud
 
-
 router = APIRouter(prefix="/users", tags=["Users"])
 
 

@@ -8,7 +8,6 @@ from app.users_enum import UsersEnum
 from app.binance_raw import get_my_trades, snapshot, get_all_order_list
 from app.config import NUMBER_OF_MILISECONDS_IN_A_DAY
 
-
 router = APIRouter(prefix="/binance", tags=["Binance"])
 
 

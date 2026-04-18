@@ -18,7 +18,6 @@ from app.crud import (
 )
 from app.tools import generate_hash, string
 
-
 KANGA_API_URL = "https://api.kanga.exchange"
 # in {https://api.kanga.exchange, https://trade.kanga.exchange/api/v2/}
 # RETRY_ATTEMPTS = 5
@@ -638,12 +637,10 @@ class KangaService:
                 for trade in trades_data:
                     if trade["id"] == trade_hash:
                         trade_time_utc = trade_time_utc + pd.Timedelta(seconds=1)
-                        print(
-                            """
+                        print("""
                             WARNING!!! Duplicate trade time in CSV detected.
                             Adjusted time:
-                            """
-                        )
+                            """)
                         print(f"trade: {trade}")
                 parsed_trade: dict = trade_str | {
                     "utc_time": trade_time_utc,

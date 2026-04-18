@@ -18,7 +18,6 @@ from app import tools, crud
 from fastapi import HTTPException
 from io import BytesIO, StringIO
 
-
 BINANCE_API_URL = "https://api.binance.com/api/v3/"
 RETRY_ATTEMPTS = 5
 KEYRING_SYSTEM_NAME = "binance_CherryWallet_api"
