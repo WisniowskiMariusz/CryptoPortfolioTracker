@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from app import crud
 from app.users_enum import UsersEnum
 
-
 router = APIRouter(prefix="/kanga", tags=["Kanga"])
 
 

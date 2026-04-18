@@ -19,8 +19,8 @@ transaction_time_type = (
     SMALLDATETIME if os.getenv("USE_SQL_SERVER", "true").lower() == "true" else DateTime
 )
 
-time_type_up_to_seconds = (
-    DATETIME2(precision=0)
+time_type_up_to_miliseconds = (
+    DATETIME2(precision=3)
     if os.getenv("USE_SQL_SERVER", "true").lower() == "true"
     else DateTime()
 )
@@ -173,7 +173,7 @@ class Exchanges(Base):
 class Trades(Base):
     __tablename__ = "trades"
 
-    utc_time = Column(time_type_up_to_seconds, primary_key=True, nullable=False)
+    utc_time = Column(time_type_up_to_miliseconds, primary_key=True, nullable=False)
     bought_currency = Column(String(16))
     sold_currency = Column(String(16))
     price = Column(DECIMAL(16, 9))
@@ -181,7 +181,7 @@ class Trades(Base):
     sold_amount = Column(DECIMAL(28, 18))
     fee_amount = Column(DECIMAL(28, 18))
     fee_currency = Column(String(16))
-    original_id = Column(String(64), primary_key=True, autoincrement=False)
+    original_id = Column(String(64))
     id = Column(String(64), primary_key=True, autoincrement=False)
     exchange_id = Column(SmallInteger)
     user_id = Column(SmallInteger)

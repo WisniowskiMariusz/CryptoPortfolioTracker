@@ -1,8 +1,9 @@
-from decimal import Decimal
 import hashlib
 import json
+import re
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
+from decimal import Decimal
 
 
 def chunked(iterable, n):
@@ -82,3 +83,11 @@ def string(x: Decimal) -> str:
     if "." in s:
         s = s.rstrip("0").rstrip(".")
     return s
+
+
+def split_amount_currency(amount_currency_string: str):
+    match = re.match(r"([0-9]*\.?[0-9]+)\s*([A-Za-z]+)", amount_currency_string)
+    if match:
+        return match.group(1), match.group(2)
+    else:
+        return None, None
